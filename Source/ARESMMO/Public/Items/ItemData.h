@@ -60,6 +60,12 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="UI")
 	FItemSize GridSize;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="UI")
+	USkeletalMesh* PreviewMesh = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="UI")
+	UStaticMesh* PreviewStaticMesh = nullptr;
+
 	/** Класс актора в мире (pickup / placeable), если нужен */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="World")
 	TSoftClassPtr<AActor> WorldActorClass;
@@ -101,4 +107,7 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	USkeletalMesh* HeroPartMesh = nullptr;
+
+	UPROPERTY(EditAnywhere, BlueprintReadOnly)
+	EEquipmentSlotType EquipmentSlot = EEquipmentSlotType::None;
 };

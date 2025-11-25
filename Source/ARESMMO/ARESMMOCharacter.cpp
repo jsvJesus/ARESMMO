@@ -10,7 +10,6 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
 #include "Components/SkeletalMeshComponent.h"
-#include "Kismet/KismetMathLibrary.h"
 #include "Items/ItemData.h"
 #include "Items/ItemTypes.h"
 
@@ -75,6 +74,23 @@ AARESMMOCharacter::AARESMMOCharacter()
 	Mesh_Legs = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Mesh_Legs")); // Legs
 	Mesh_Legs->SetupAttachment(GetMesh());
 	Mesh_Legs->SetLeaderPoseComponent(GetMesh());
+
+	// ===== Create Equipment Meshes =====
+	Mesh_Armor = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Mesh_Armor"));
+	Mesh_Armor->SetupAttachment(GetMesh());
+	Mesh_Armor->SetLeaderPoseComponent(GetMesh());
+
+	Mesh_Helmet = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Mesh_Helmet"));
+	Mesh_Helmet->SetupAttachment(GetMesh());
+	Mesh_Helmet->SetLeaderPoseComponent(GetMesh());
+
+	Mesh_Mask = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Mesh_Mask"));
+	Mesh_Mask->SetupAttachment(GetMesh());
+	Mesh_Mask->SetLeaderPoseComponent(GetMesh());
+
+	Mesh_Backpack = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Mesh_Backpack"));
+	Mesh_Backpack->SetupAttachment(GetMesh());
+	Mesh_Backpack->SetLeaderPoseComponent(GetMesh());
 }
 
 void AARESMMOCharacter::BeginPlay()
@@ -306,6 +322,82 @@ void AARESMMOCharacter::EquipHeroPart(const FItemBaseRow& ItemRow)
 	}
 
 	UE_LOG(LogTemp, Log, TEXT("Equipped mesh for part: %d"), (int)ItemRow.HeroPartType);
+}
+
+void AARESMMOCharacter::EquipEquipment(const FItemBaseRow& ItemRow)
+{
+	if (!ItemRow.HeroPartMesh)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("EquipEquipment: Invalid mesh for item %s"),
+			*ItemRow.InternalName.ToString());
+		return;
+	}
+
+	switch (ItemRow.StoreCategory)
+	{
+	case EStoreCategory::storecat_Armor:
+		Mesh_Armor->SetSkeletalMesh(ItemRow.HeroPartMesh);
+		break;
+
+	case EStoreCategory::storecat_Helmet:
+		Mesh_Helmet->SetSkeletalMesh(ItemRow.HeroPartMesh);
+		break;
+
+	case EStoreCategory::storecat_Mask:
+		Mesh_Mask->SetSkeletalMesh(ItemRow.HeroPartMesh);
+		break;
+
+	case EStoreCategory::storecat_Backpack:
+		Mesh_Backpack->SetSkeletalMesh(ItemRow.HeroPartMesh);
+		break;
+
+	default:
+		UE_LOG(LogTemp, Warning, TEXT("EquipEquipment: Item %s is not wearable"),
+			*ItemRow.InternalName.ToString());
+		return;
+	}
+
+	UE_LOG(LogTemp, Log, TEXT("Equipped equipment: %s"),
+		   *ItemRow.InternalName.ToString());
+}
+
+void AARESMMOCharacter::EquipItem(const FItemBaseRow& ItemRow)
+{
+	switch (ItemRow.StoreCategory)
+	{
+		// Части тела (модульный персонаж)
+	case EStoreCategory::storecat_HeroParts:
+		EquipHeroPart(ItemRow);
+		break;
+
+		// Экипировка, которая вешается на персонажа
+	case EStoreCategory::storecat_Armor:
+	case EStoreCategory::storecat_Helmet:
+	case EStoreCategory::storecat_Mask:
+	case EStoreCategory::storecat_Backpack:
+		EquipEquipment(ItemRow);
+		break;
+
+		// Оружие, гранаты, placeable — меняют AnimState
+	case EStoreCategory::storecat_ASR:
+	case EStoreCategory::storecat_SNP:
+	case EStoreCategory::storecat_SHTG:
+	case EStoreCategory::storecat_HG:
+	case EStoreCategory::storecat_MG:
+	case EStoreCategory::storecat_SMG:
+	case EStoreCategory::storecat_MELEE:
+	case EStoreCategory::storecat_Grenade:
+	case EStoreCategory::storecat_PlaceItem:
+		SetWeaponAnimStateFromItem(ItemRow);
+		break;
+
+		// Остальные категории пока не экипируем (Medicine/Food/Water/UsableItem и т.д.)
+	default:
+		UE_LOG(LogTemp, Log, TEXT("EquipItem: Item %s (category %d) has no equip logic yet"),
+			   *ItemRow.InternalName.ToString(),
+			   static_cast<int32>(ItemRow.StoreCategory));
+		break;
+	}
 }
 
 void AARESMMOCharacter::SetWeaponState(EWeaponAnimState NewState)

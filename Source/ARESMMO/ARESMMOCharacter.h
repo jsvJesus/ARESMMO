@@ -175,8 +175,32 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|HeroParts")
 	USkeletalMeshComponent* Mesh_Legs;
 
+	// ===== Equipment Visual Meshes =====
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|EquipmentMesh")
+	USkeletalMeshComponent* Mesh_Armor;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|EquipmentMesh")
+	USkeletalMeshComponent* Mesh_Helmet;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|EquipmentMesh")
+	USkeletalMeshComponent* Mesh_Mask;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|EquipmentMesh")
+	USkeletalMeshComponent* Mesh_Backpack;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|Equipment")
+	TMap<EEquipmentSlotType, FItemBaseRow> EquipmentSlots;
+
 	// Функция экипировки части тела
 	UFUNCTION(BlueprintCallable, Category="ARES|HeroParts")
 	void EquipHeroPart(const FItemBaseRow& ItemRow);
+	
+	// Функция экипировки предмета экипировки (броня/шлем/маска/рюкзак)
+	UFUNCTION(BlueprintCallable, Category="ARES|Equipment")
+	void EquipEquipment(const FItemBaseRow& ItemRow);
+
+	// Универсальная функция экипировки любого предмета по категории
+	UFUNCTION(BlueprintCallable, Category="ARES|Equipment")
+	void EquipItem(const FItemBaseRow& ItemRow);
 };
 

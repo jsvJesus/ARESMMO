@@ -12,6 +12,34 @@ enum class EHeroPartType : uint8
 	Legs UMETA(DisplayName="Legs")
 };
 
+UENUM(BlueprintType)
+enum class EEquipmentSlotType : uint8
+{
+	None                 UMETA(DisplayName="None"),
+
+	// Hero parts
+	EquipmentSlotHead    UMETA(DisplayName="Head Part"),
+	EquipmentSlotBody    UMETA(DisplayName="Body Part"),
+	EquipmentSlotLegs    UMETA(DisplayName="Legs Part"),
+
+	// Gear
+	EquipmentSlotArmor   UMETA(DisplayName="Armor"),
+	EquipmentSlotHelmet  UMETA(DisplayName="Helmet"),
+	EquipmentSlotMask    UMETA(DisplayName="Mask"),
+	EquipmentSlotBackpack UMETA(DisplayName="Backpack"),
+
+	// Weapons
+	EquipmentSlotWeapon1 UMETA(DisplayName="Weapon 1"),
+	EquipmentSlotWeapon2 UMETA(DisplayName="Weapon 2"),
+	EquipmentSlotPistol  UMETA(DisplayName="Pistol"),
+	EquipmentSlotKnife   UMETA(DisplayName="Knife"),
+	EquipmentSlotGrenade UMETA(DisplayName="Grenade"),
+
+	// Usable
+	EquipmentSlotDevice1 UMETA(DisplayName="Device 1"),
+	EquipmentSlotDevice2 UMETA(DisplayName="Device 2")
+};
+
 /** Главная категория предмета */
 UENUM(BlueprintType)
 enum class EStoreCategory : uint8
@@ -176,3 +204,37 @@ enum class EItemClass : uint8
 	WeaponATTM    UMETA(DisplayName="Weapon Attachment"),
 	GearATTM      UMETA(DisplayName="Gear Attachment")
 };
+
+static EEquipmentSlotType GetEquipmentSlotForCategory(EStoreCategory Category)
+{
+	switch (Category)
+	{
+	case EStoreCategory::storecat_Armor:    return EEquipmentSlotType::EquipmentSlotArmor;
+	case EStoreCategory::storecat_Helmet:   return EEquipmentSlotType::EquipmentSlotHelmet;
+	case EStoreCategory::storecat_Mask:     return EEquipmentSlotType::EquipmentSlotMask;
+	case EStoreCategory::storecat_Backpack: return EEquipmentSlotType::EquipmentSlotBackpack;
+
+	case EStoreCategory::storecat_ASR:
+	case EStoreCategory::storecat_SNP:
+	case EStoreCategory::storecat_SMG:
+	case EStoreCategory::storecat_SHTG:
+	case EStoreCategory::storecat_MG:
+		return EEquipmentSlotType::EquipmentSlotWeapon1; // Weapon2 выбирается логикой
+
+	case EStoreCategory::storecat_HG:     return EEquipmentSlotType::EquipmentSlotPistol;
+	case EStoreCategory::storecat_MELEE:  return EEquipmentSlotType::EquipmentSlotKnife;
+	case EStoreCategory::storecat_Grenade:return EEquipmentSlotType::EquipmentSlotGrenade;
+
+		// Hero parts
+	case EStoreCategory::storecat_HeroParts:
+		// уточняется по StoreSubCategory
+		return EEquipmentSlotType::None;
+
+		// Usable items
+	case EStoreCategory::storecat_UsableItem:
+		return EEquipmentSlotType::EquipmentSlotDevice1;
+
+	default:
+		return EEquipmentSlotType::None;
+	}
+}
