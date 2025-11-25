@@ -1,6 +1,5 @@
 This project is being developed by one developer
 Author Login: jsv Jesus
-Author Name: Artem
 
 The project is being developed using the Unreal Engine 5.5.4.
 Help or support the author:
