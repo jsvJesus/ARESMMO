@@ -22,5 +22,5 @@ List of what is implemented in this package:
 
 4. AnimStat and WeaponStat for Player.
 5. Expanded ItemTable and ItemTypes via Primary Data Assets.
-6. Spatial Inventory aka Stalker2.
-7. Equipment Widget aka Stalker2.
+6. Spatial Inventory aka Stalker2. (Not finished)
+7. Equipment Widget aka Stalker2. (Not finished)
