@@ -4,6 +4,8 @@
 #include "GameFramework/Character.h"
 #include "Logging/LogMacros.h"
 #include "Items/ItemData.h"
+class UPlayerStatsComponent;
+class UGameHUDWidget;
 #include "ARESMMOCharacter.generated.h"
 
 class UAresCharacterAnimInstance;
@@ -191,6 +193,21 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|Equipment")
 	TMap<EEquipmentSlotType, FItemBaseRow> EquipmentSlots;
 
+	// ===== PLAYER STATS =====
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|Stats")
+	UPlayerStatsComponent* Stats;
+
+	// Стоимость стамины за секунду спринта
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|Movement")
+	float SprintStaminaCostPerSecond = 15.0f;
+
+	// ===== UI / Game HUD =====
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|UI")
+	TSubclassOf<UGameHUDWidget> GameHUDWidgetClass;
+
+	UPROPERTY()
+	UGameHUDWidget* GameHUDWidgetInstance = nullptr;
+
 	// Функция экипировки части тела
 	UFUNCTION(BlueprintCallable, Category="ARES|HeroParts")
 	void EquipHeroPart(const FItemBaseRow& ItemRow);
@@ -202,5 +219,9 @@ public:
 	// Универсальная функция экипировки любого предмета по категории
 	UFUNCTION(BlueprintCallable, Category="ARES|Equipment")
 	void EquipItem(const FItemBaseRow& ItemRow);
+
+	// Заглушка: временно для использования предметов Medicine/Food/Water
+	UFUNCTION(BlueprintCallable, Category="ARES|Inventory")
+	void UseItem(const FItemBaseRow& ItemRow);
 };
 

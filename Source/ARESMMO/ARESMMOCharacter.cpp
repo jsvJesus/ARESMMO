@@ -2,7 +2,7 @@
 
 #include "Engine/LocalPlayer.h"
 #include "Camera/CameraComponent.h"
-#include "Components/CapsuleComponent.h"
+#include "UI/Game/GameHUDWidget.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/Controller.h"
@@ -10,6 +10,8 @@
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
 #include "Components/SkeletalMeshComponent.h"
+#include "Components/PlayerStatsComponent.h"
+#include "Components/CapsuleComponent.h"
 #include "Items/ItemData.h"
 #include "Items/ItemTypes.h"
 
@@ -91,11 +93,30 @@ AARESMMOCharacter::AARESMMOCharacter()
 	Mesh_Backpack = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Mesh_Backpack"));
 	Mesh_Backpack->SetupAttachment(GetMesh());
 	Mesh_Backpack->SetLeaderPoseComponent(GetMesh());
+
+	// ===== Player StatsComponent =====
+	Stats = CreateDefaultSubobject<UPlayerStatsComponent>(TEXT("PlayerStats"));
 }
 
 void AARESMMOCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	// Создаём постоянный GameHUD только на локальном игроке
+	if (IsLocallyControlled() && GameHUDWidgetClass)
+	{
+		if (APlayerController* PC = Cast<APlayerController>(GetController()))
+		{
+			GameHUDWidgetInstance = CreateWidget<UGameHUDWidget>(PC, GameHUDWidgetClass);
+			if (GameHUDWidgetInstance)
+			{
+				GameHUDWidgetInstance->AddToViewport();
+
+				// Прокидываем в виджет нашего Pawn, чтобы он нашёл UPlayerStatsComponent
+				GameHUDWidgetInstance->InitFromPawn(this);
+			}
+		}
+	}
 }
 
 void AARESMMOCharacter::Tick(float DeltaSeconds)
@@ -106,6 +127,18 @@ void AARESMMOCharacter::Tick(float DeltaSeconds)
 	{
 		// синхроним флаг crouch для AnimBP
 		bIsCrouchedAnim = Move->IsCrouching();
+	}
+
+	// Уменьшаем стамину при спринте
+	if (bIsSprinting && Stats)
+	{
+		Stats->ConsumeStamina(SprintStaminaCostPerSecond * DeltaSeconds);
+
+		// Если стамина кончилась — вырубаем спринт
+		if (Stats->Base.Stamina <= 0.f)
+		{
+			StopSprint();
+		}
 	}
 }
 
@@ -400,6 +433,27 @@ void AARESMMOCharacter::EquipItem(const FItemBaseRow& ItemRow)
 	}
 }
 
+void AARESMMOCharacter::UseItem(const FItemBaseRow& ItemRow)
+{ // Заглушка: временно для использования предметов Medicine/Food/Water
+	if (!Stats)
+	{
+		return;
+	}
+
+	switch (ItemRow.ItemClass)
+	{
+	case EItemClass::Medicine:
+	case EItemClass::Food:
+	case EItemClass::Water:
+		Stats->ApplyConsumable(ItemRow);
+		break;
+
+	default:
+		// другие классы (Ammo, Weapon, и т.п.) здесь не обрабатываем
+		break;
+	}
+}
+
 void AARESMMOCharacter::SetWeaponState(EWeaponAnimState NewState)
 {
 	// основное состояние
@@ -460,6 +514,22 @@ void AARESMMOCharacter::StartSprint()
 		if (Move->IsCrouching())
 		{
 			return;
+		}
+
+		// Проверка статов
+		if (Stats)
+		{
+			// если нет стамины — не бежать
+			if (Stats->Base.Stamina <= 0.f)
+			{
+				return;
+			}
+
+			// если жажда >= 60% — не бежать
+			if (Stats->Secondary.Water >= 60.f)
+			{
+				return;
+			}
 		}
 		
 		bIsSprinting = true;

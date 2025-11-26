@@ -6,6 +6,60 @@
 #include "ItemTypes.h"
 #include "ItemData.generated.h"
 
+USTRUCT(BlueprintType)
+struct FConsumableEffects
+{
+	GENERATED_BODY()
+
+	/** Сколько отхилить/нанести по здоровью (+хил, -урон) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Consumable")
+	float HealthDelta = 0.0f;
+
+	/** Сколько восстановить/сжечь стамину (+восп, -сжечь) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Consumable")
+	float StaminaDelta = 0.0f;
+
+	/** Изменение голода: - снижает голод, + увеличивает (0..100) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Consumable")
+	float FoodDelta = 0.0f;
+
+	/** Изменение жажды: - снижает жажду, + увеличивает (0..100) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Consumable")
+	float WaterDelta = 0.0f;
+
+	/** Радиоактивность: + даёт радиацию, - очищает */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Consumable")
+	float RadiationDelta = 0.0f;
+
+	/** Токсическое заражение (Biohazard) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Consumable")
+	float BiohazardDelta = 0.0f;
+
+	/** Пси-радиация (PsyRad) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Consumable")
+	float PsyRadDelta = 0.0f;
+
+	/** Отравление (Poisoning) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Consumable")
+	float PoisoningDelta = 0.0f;
+
+	/** Cold — заморозка/переохлаждение от этого предмета (например, холодная вода зимой) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Consumable")
+	float ColdDelta = 0.0f;
+
+	/**
+	 * Шанс плохого эффекта (0..100).
+	 * Например, прокисшая еда/грязная вода:
+	 *   - если прокнуло — добавим доп. Poisoning/Biohazard и т.п.
+	 */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Consumable")
+	float BadEffectChance = 0.0f;
+
+	/** Доп. сила плохого эффекта, если прокнул BadEffectChance */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Consumable")
+	float BadEffectPower = 0.0f;
+};
+
 /**
  * Базовая строка таблицы предметов.
  * На этом этапе — общая информация, без специфичных статов оружия и т.п.
@@ -43,6 +97,10 @@ public:
 	/** Геймплейный класс предмета (для логики инвентаря и применения) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Item")
 	EItemClass ItemClass = EItemClass::None;
+
+	/** Эффекты при употреблении (Medicine/Food/Water) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Consumable")
+	FConsumableEffects ConsumableEffects;
 
 	/** Максимальный размер стака */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Item")
