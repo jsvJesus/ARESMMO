@@ -3,15 +3,18 @@
 #include "Engine/LocalPlayer.h"
 #include "Camera/CameraComponent.h"
 #include "UI/Game/GameHUDWidget.h"
+#include "UI/Game/Inventory/InventoryLayoutWidget.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/Controller.h"
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
+#include "Components/AnimStateComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/PlayerStatsComponent.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/SceneCaptureComponent2D.h"
 #include "Items/ItemData.h"
 #include "Items/ItemTypes.h"
 
@@ -19,7 +22,6 @@ DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
 //////////////////////////////////////////////////////////////////////////
 // AARESMMOCharacter
-
 AARESMMOCharacter::AARESMMOCharacter()
 {
 	// Set size for collision capsule
@@ -59,10 +61,10 @@ AARESMMOCharacter::AARESMMOCharacter()
 	CameraBoom->TargetArmLength = 400.0f; // The camera follows at this distance behind the character	
 	CameraBoom->bUsePawnControlRotation = true; // Rotate the arm based on the controller
 
-	// Create a follow camera
-	FollowCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FollowCamera"));
-	FollowCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName); // Attach the camera to the end of the boom and let the boom adjust to match the controller orientation
-	FollowCamera->bUsePawnControlRotation = false; // Camera does not rotate relative to arm
+	// Create a TPS Camera
+	TPSCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("TPSCamera"));
+	TPSCamera->SetupAttachment(CameraBoom, USpringArmComponent::SocketName); // Attach the camera to the end of the boom and let the boom adjust to match the controller orientation
+	TPSCamera->bUsePawnControlRotation = false; // Camera does not rotate relative to arm
 
 	// ===== Create Modular Meshes =====
 	Mesh_Head = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Mesh_Head")); // Head
@@ -94,13 +96,65 @@ AARESMMOCharacter::AARESMMOCharacter()
 	Mesh_Backpack->SetupAttachment(GetMesh());
 	Mesh_Backpack->SetLeaderPoseComponent(GetMesh());
 
+	// Create a FPS Camera
+	FPSCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FPSCamera"));
+	FPSCamera->SetupAttachment(GetMesh(), TEXT("head")); // имя сокета головы своё
+	FPSCamera->bUsePawnControlRotation = true;
+
+	if (TPSCamera)
+	{
+		TPSCamera->SetActive(true);
+	}
+	if (FPSCamera)
+	{
+		FPSCamera->SetActive(false);
+	}
+	bIsFirstPerson = false;
+
 	// ===== Player StatsComponent =====
 	Stats = CreateDefaultSubobject<UPlayerStatsComponent>(TEXT("PlayerStats"));
+
+	// ===== Animations =====
+	AnimStateComponent = CreateDefaultSubobject<UAnimStateComponent>(TEXT("AnimStateComponent"));
+
+	// === SceneCapture для превью ===
+	InventoryPreviewPivot = CreateDefaultSubobject<USceneComponent>(TEXT("InventoryPreviewPivot"));
+	InventoryPreviewPivot->SetupAttachment(GetMesh());
+	
+	InventoryCapture = CreateDefaultSubobject<USceneCaptureComponent2D>(TEXT("InventoryCapture"));
+	InventoryCapture->SetupAttachment(InventoryPreviewPivot);
+	InventoryCapture->bCaptureEveryFrame = true;
+	InventoryCapture->bCaptureOnMovement = false;
+	InventoryCapture->FOVAngle = 35.f;
+
+	// Позиция камеры "как в инвентаре"
+	InventoryPreviewPivot->SetRelativeLocation(FVector::ZeroVector);
+	InventoryPreviewPivot->SetRelativeRotation(FRotator::ZeroRotator);
+	
+	InventoryCapture->SetRelativeLocation(FVector(0.f, 150.f, 80.f));
+	InventoryCapture->SetRelativeRotation(FRotator(0.f, -180.f, 0.f));
+	InventoryCapture->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
 }
 
 void AARESMMOCharacter::BeginPlay()
 {
 	Super::BeginPlay();
+
+	if (USkeletalMeshComponent* MeshComp = GetMesh())
+	{
+		MeshComp->SetAnimationMode(EAnimationMode::AnimationSingleNode);
+	}
+
+	// Сохраняем дефолтные настройки TPS камеры
+	if (CameraBoom)
+	{
+		TPSDefaultArmLength = CameraBoom->TargetArmLength;
+	}
+
+	if (TPSCamera)
+	{
+		TPSDefaultFOV = TPSCamera->FieldOfView;
+	}
 
 	// Создаём постоянный GameHUD только на локальном игроке
 	if (IsLocallyControlled() && GameHUDWidgetClass)
@@ -117,28 +171,64 @@ void AARESMMOCharacter::BeginPlay()
 			}
 		}
 	}
+
+	if (InventoryRenderTarget)
+	{
+		InventoryCapture->TextureTarget = InventoryRenderTarget;
+
+		// Очищаем и добавляем только нужные компоненты
+		InventoryCapture->ShowOnlyComponents.Empty();
+
+		InventoryCapture->ShowOnlyComponents.Add(GetMesh());
+		InventoryCapture->ShowOnlyComponents.Add(Mesh_Head);
+		InventoryCapture->ShowOnlyComponents.Add(Mesh_Body);
+		InventoryCapture->ShowOnlyComponents.Add(Mesh_Legs);
+		InventoryCapture->ShowOnlyComponents.Add(Mesh_Armor);
+		InventoryCapture->ShowOnlyComponents.Add(Mesh_Helmet);
+		InventoryCapture->ShowOnlyComponents.Add(Mesh_Mask);
+		InventoryCapture->ShowOnlyComponents.Add(Mesh_Backpack);
+	}
+
+	if (InventoryCapture && InventoryRenderTarget)
+	{
+		InventoryCapture->TextureTarget     = InventoryRenderTarget;
+		InventoryCapture->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
+
+		// Полный аналог узла Show Only Actor Components (Self)
+		InventoryCapture->ShowOnlyActorComponents(this, true); // true = брать компоненты детей
+	}
+
+	if (AnimStateComponent)
+	{
+		// начальное состояние: стоим без оружия
+		AnimStateComponent->SetWeaponState(EWeaponState::Unarmed);
+		AnimStateComponent->UpdateMovementFlags(false, false, false, 0.f);
+	}
 }
 
 void AARESMMOCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 
-	if (UCharacterMovementComponent* Move = GetCharacterMovement())
-	{
-		// синхроним флаг crouch для AnimBP
-		bIsCrouchedAnim = Move->IsCrouching();
-	}
-
-	// Уменьшаем стамину при спринте
+	// Стамина из спринта
 	if (bIsSprinting && Stats)
 	{
 		Stats->ConsumeStamina(SprintStaminaCostPerSecond * DeltaSeconds);
 
-		// Если стамина кончилась — вырубаем спринт
 		if (Stats->Base.Stamina <= 0.f)
 		{
 			StopSprint();
 		}
+	}
+
+	// === ОБНОВЛЕНИЕ АНИМАЦИОННЫХ СОСТОЯНИЙ ДВИЖЕНИЯ ===
+	if (AnimStateComponent)
+	{
+		const bool bInAir    = GetCharacterMovement()->IsFalling();
+		const bool bInCrouch = GetCharacterMovement()->IsCrouching();
+		const float Speed    = GetVelocity().Size2D();
+
+		AnimStateComponent->UpdateMovementFlags(bIsSprinting, bInCrouch, bInAir, Speed);
 	}
 }
 
@@ -171,6 +261,39 @@ void AARESMMOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 		EnhancedInputComponent->BindAction(SprintAction, ETriggerEvent::Triggered, this, &AARESMMOCharacter::Sprinting); // Sprinting
 		EnhancedInputComponent->BindAction(CrouchAction, ETriggerEvent::Started, this, &AARESMMOCharacter::Crouching); // Crouching
 		EnhancedInputComponent->BindAction(LookAction, ETriggerEvent::Triggered, this, &AARESMMOCharacter::Look);
+
+		if (ToggleViewAction) // Смена камеры
+		{
+			EnhancedInputComponent->BindAction(ToggleViewAction, ETriggerEvent::Started, this, &AARESMMOCharacter::ToggleCameraMode);
+		}
+
+		if (InventoryAction) // Открытие/Закрытие Инвентаря
+		{
+			EnhancedInputComponent->BindAction(
+				InventoryAction,
+				ETriggerEvent::Started,
+				this,
+				&AARESMMOCharacter::ToggleInventory
+			);
+		}
+
+		// Aim Offset
+		if (AimAction)
+		{
+			EnhancedInputComponent->BindAction(
+				AimAction,
+				ETriggerEvent::Started,
+				this,
+				&AARESMMOCharacter::StartAim
+			);
+
+			EnhancedInputComponent->BindAction(
+				AimAction,
+				ETriggerEvent::Completed,
+				this,
+				&AARESMMOCharacter::StopAim
+			);
+		}
 	}
 	else
 	{
@@ -180,22 +303,21 @@ void AARESMMOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 
 void AARESMMOCharacter::Move(const FInputActionValue& Value)
 {
-	// input is a Vector2D
 	FVector2D MovementVector = Value.Get<FVector2D>();
+
+	if (AnimStateComponent)
+	{
+		AnimStateComponent->UpdateMoveInput(MovementVector);
+	}
 
 	if (Controller != nullptr)
 	{
-		// find out which way is forward
 		const FRotator Rotation = Controller->GetControlRotation();
 		const FRotator YawRotation(0, Rotation.Yaw, 0);
 
-		// get forward vector
 		const FVector ForwardDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::X);
-	
-		// get right vector 
-		const FVector RightDirection = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
+		const FVector RightDirection   = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 
-		// add movement 
 		AddMovementInput(ForwardDirection, MovementVector.Y);
 		AddMovementInput(RightDirection, MovementVector.X);
 	}
@@ -268,68 +390,6 @@ void AARESMMOCharacter::Crouching(const FInputActionValue& Value)
 	}
 }
 
-/* Direction */
-void AARESMMOCharacter::GetOrientationAngles(float Direction, float& F_Orientation_Angle, float& R_Orientation_Angle,
-	float& L_Orientation_Angle, float& B_Orientation_Angle) const
-{
-	const float Forward  = Direction - 0.0f;
-	const float Right    = Direction - 90.0f;
-	const float Left     = Direction - (-90.0f);
-	const float Backward = Direction - 180.0f;
-
-	// Нормализуем градусы в диапазон -180..180, чтобы не плодить 720, 1080 и т.п.
-	F_Orientation_Angle = FMath::UnwindDegrees(Forward);
-	R_Orientation_Angle = FMath::UnwindDegrees(Right);
-	L_Orientation_Angle = FMath::UnwindDegrees(Left);
-	B_Orientation_Angle = FMath::UnwindDegrees(Backward);
-}
-
-void AARESMMOCharacter::SetWeaponAnimStateFromItem(const FItemBaseRow& ItemRow)
-{
-	EWeaponAnimState NewState = EWeaponAnimState::Unarmed;
-
-	switch (ItemRow.StoreCategory)
-	{
-	case EStoreCategory::storecat_ASR:
-	case EStoreCategory::storecat_SNP:
-	case EStoreCategory::storecat_SMG:
-		NewState = EWeaponAnimState::Rifle;
-		break;
-	case EStoreCategory::storecat_HG:
-		NewState = EWeaponAnimState::Pistol;
-		break;
-	case EStoreCategory::storecat_SHTG:
-	case EStoreCategory::storecat_MG:
-		NewState = EWeaponAnimState::Shotgun;
-		break;
-	case EStoreCategory::storecat_MELEE:
-		NewState = EWeaponAnimState::Melee;
-		break;
-	case EStoreCategory::storecat_Grenade:
-		NewState = EWeaponAnimState::Grenade;
-		break;
-	case EStoreCategory::storecat_PlaceItem:
-		NewState = EWeaponAnimState::PlaceItem;
-		break;
-	default:
-		NewState = EWeaponAnimState::Unarmed;
-		break;
-	}
-
-	SetWeaponAnimState(NewState); // теперь обновит и WeaponState, и булки
-}
-
-void AARESMMOCharacter::SetWeaponAnimStateFromItem(const FItemBaseRow* ItemRow)
-{
-	if (!ItemRow)
-	{
-		SetWeaponAnimState(EWeaponAnimState::Unarmed);
-		return;
-	}
-
-	SetWeaponAnimStateFromItem(*ItemRow);
-}
-
 void AARESMMOCharacter::EquipHeroPart(const FItemBaseRow& ItemRow)
 {
 	if (ItemRow.HeroPartType == EHeroPartType::None || !ItemRow.HeroPartMesh)
@@ -398,12 +458,10 @@ void AARESMMOCharacter::EquipItem(const FItemBaseRow& ItemRow)
 {
 	switch (ItemRow.StoreCategory)
 	{
-		// Части тела (модульный персонаж)
 	case EStoreCategory::storecat_HeroParts:
 		EquipHeroPart(ItemRow);
 		break;
 
-		// Экипировка, которая вешается на персонажа
 	case EStoreCategory::storecat_Armor:
 	case EStoreCategory::storecat_Helmet:
 	case EStoreCategory::storecat_Mask:
@@ -411,7 +469,7 @@ void AARESMMOCharacter::EquipItem(const FItemBaseRow& ItemRow)
 		EquipEquipment(ItemRow);
 		break;
 
-		// Оружие, гранаты, placeable — меняют AnimState
+		// Оружие / гранаты / плейсаблы — меняют WeaponState
 	case EStoreCategory::storecat_ASR:
 	case EStoreCategory::storecat_SNP:
 	case EStoreCategory::storecat_SHTG:
@@ -421,10 +479,16 @@ void AARESMMOCharacter::EquipItem(const FItemBaseRow& ItemRow)
 	case EStoreCategory::storecat_MELEE:
 	case EStoreCategory::storecat_Grenade:
 	case EStoreCategory::storecat_PlaceItem:
-		SetWeaponAnimStateFromItem(ItemRow);
-		break;
+	case EStoreCategory::storecat_UsableItem:
+		{
+			if (AnimStateComponent)
+			{
+				const EWeaponState NewWeaponState = GetWeaponStateForCategory(ItemRow.StoreCategory);
+				AnimStateComponent->SetWeaponState(NewWeaponState);
+			}
+			break;
+		}
 
-		// Остальные категории пока не экипируем (Medicine/Food/Water/UsableItem и т.д.)
 	default:
 		UE_LOG(LogTemp, Log, TEXT("EquipItem: Item %s (category %d) has no equip logic yet"),
 			   *ItemRow.InternalName.ToString(),
@@ -454,57 +518,50 @@ void AARESMMOCharacter::UseItem(const FItemBaseRow& ItemRow)
 	}
 }
 
-void AARESMMOCharacter::SetWeaponState(EWeaponAnimState NewState)
+void AARESMMOCharacter::StartAim()
 {
-	// основное состояние
-	WeaponState = NewState;
+	// Aim работает ТОЛЬКО в TPS
+	if (bIsFirstPerson)
+	{
+		return;
+	}
 
-	// флаги под разные стойки
-	bHasRifle     = (NewState == EWeaponAnimState::Rifle);
-	bHasPistol    = (NewState == EWeaponAnimState::Pistol);
-	bHasShotgun   = (NewState == EWeaponAnimState::Shotgun);
-	bHasMelee     = (NewState == EWeaponAnimState::Melee);
-	bHasGrenade   = (NewState == EWeaponAnimState::Grenade);
-	bHasPlaceItem = (NewState == EWeaponAnimState::PlaceItem);
+	bIsAiming = true;
+
+	// При Aim отключаем спринт
+	bIsSprinting = false;
+
+	if (UCharacterMovementComponent* Move = GetCharacterMovement())
+	{
+		Move->MaxWalkSpeed = WalkSpeed;
+	}
+
+	// Зумим TPS-камеру
+	if (CameraBoom)
+	{
+		CameraBoom->TargetArmLength = TPSAimArmLength;
+	}
+
+	if (TPSCamera)
+	{
+		TPSCamera->SetFieldOfView(TPSAimFOV);
+	}
 }
 
-void AARESMMOCharacter::SetWeaponAnimState(EWeaponAnimState NewState)
+void AARESMMOCharacter::StopAim()
 {
-	CurrentWeaponAnimState = NewState;
+	bIsAiming = false;
 
-	// обновляем WeaponState + булки
-	SetWeaponState(NewState);
-}
-
-void AARESMMOCharacter::UpdateMovementStateFromDirection(float Direction)
-{
-	// Нормализуем угол в -180..180, чтобы не ловить 360/720 и т.п.
-	const float Normalized = FMath::UnwindDegrees(Direction);
-
-	EMovementState NewState = EMovementState::None;
-
-	// 1) Forward: -70 .. 70
-	if (Normalized >= -70.0f && Normalized <= 70.0f)
+	// Возвращаем дефолтные значения TPS камеры
+	if (CameraBoom)
 	{
-		NewState = EMovementState::Forward;
-	}
-	// 2) Right: 70 .. 110
-	else if (Normalized > 70.0f && Normalized <= 110.0f)
-	{
-		NewState = EMovementState::Right;
-	}
-	// 3) Left: -110 .. -70
-	else if (Normalized >= -110.0f && Normalized < -70.0f)
-	{
-		NewState = EMovementState::Left;
-	}
-	// 4) Остальное — Backward
-	else
-	{
-		NewState = EMovementState::Backward;
+		CameraBoom->TargetArmLength = TPSDefaultArmLength;
 	}
 
-	MovementState = NewState;
+	if (TPSCamera)
+	{
+		TPSCamera->SetFieldOfView(TPSDefaultFOV);
+	}
 }
 
 void AARESMMOCharacter::StartSprint()
@@ -544,6 +601,139 @@ void AARESMMOCharacter::StopSprint()
 		bIsSprinting = false;
 
 		// возвращаем обычную скорость (walk или crouch)
-		Move->MaxWalkSpeed = bIsCrouchedAnim ? CrouchSpeed : WalkSpeed;
+		const bool bIsCrouchedNow = Move->IsCrouching();
+		Move->MaxWalkSpeed = bIsCrouchedNow ? CrouchSpeed : WalkSpeed;
 	}
+}
+
+void AARESMMOCharacter::SwitchToFPS()
+{
+	if (!FPSCamera || !TPSCamera) return;
+
+	// На всякий случай убираем Aim, чтобы не оставались zoom-значения
+	StopAim();
+
+	bIsFirstPerson = true;
+
+	// --- Камеры ---
+	TPSCamera->SetActive(false);
+	FPSCamera->SetActive(true);
+
+	// --- Вращение ---
+	bUseControllerRotationYaw = true;
+
+	// --- Скрываем голову / шлем / маску в FPS ---
+	//if (Mesh_Head)   Mesh_Head->SetVisibility(false, true);
+	if (Mesh_Helmet) Mesh_Helmet->SetVisibility(false, true);
+	if (Mesh_Mask)   Mesh_Mask->SetVisibility(false, true);
+}
+
+void AARESMMOCharacter::SwitchToTPS()
+{
+	if (!FPSCamera || !TPSCamera) return;
+
+	// Всегда выходим из Aim при смене вида
+	StopAim();
+
+	bIsFirstPerson = false;
+
+	// --- Камеры ---
+	TPSCamera->SetActive(true);
+	FPSCamera->SetActive(false);
+
+	// --- Вращение ---
+	bUseControllerRotationYaw = true;
+
+	// --- Возвращаем голову / шлем / маску ---
+	//if (Mesh_Head)   Mesh_Head->SetVisibility(true, true);
+	if (Mesh_Helmet) Mesh_Helmet->SetVisibility(true, true);
+	if (Mesh_Mask)   Mesh_Mask->SetVisibility(true, true);
+}
+
+void AARESMMOCharacter::ToggleCameraMode()
+{
+	if (bIsFirstPerson)
+	{
+		SwitchToTPS();
+	}
+	else
+	{
+		SwitchToFPS();
+	}
+}
+
+void AARESMMOCharacter::ToggleInventory()
+{
+    if (!InventoryLayoutWidgetInstance)
+    {
+        if (!InventoryLayoutWidgetClass)
+        {
+            UE_LOG(LogTemp, Warning, TEXT("InventoryLayoutWidgetClass is not set on %s"), *GetName());
+            return;
+        }
+
+        APlayerController* PC = Cast<APlayerController>(GetController());
+        if (!PC)
+        {
+            return;
+        }
+
+        InventoryLayoutWidgetInstance = CreateWidget<UInventoryLayoutWidget>(PC, InventoryLayoutWidgetClass);
+        if (InventoryLayoutWidgetInstance)
+        {
+            InventoryLayoutWidgetInstance->AddToViewport();
+            InventoryLayoutWidgetInstance->InitPreview(this);
+            bIsInventoryOpen = true;
+        }
+    }
+    else
+    {
+        const bool bNewOpen = !bIsInventoryOpen;
+
+        InventoryLayoutWidgetInstance->SetVisibility(
+            bNewOpen ? ESlateVisibility::Visible : ESlateVisibility::Collapsed
+        );
+
+        // при каждом открытии обновляем превью (на случай новой "эквип")
+        if (bNewOpen)
+        {
+            InventoryLayoutWidgetInstance->InitPreview(this);
+        }
+
+        bIsInventoryOpen = bNewOpen;
+    }
+
+    // ----- Режим ввода и курсор -----
+    if (APlayerController* PC = Cast<APlayerController>(GetController()))
+    {
+        if (bIsInventoryOpen)
+        {
+            FInputModeGameAndUI InputMode;
+            InputMode.SetWidgetToFocus(InventoryLayoutWidgetInstance->TakeWidget());
+            InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+            PC->SetInputMode(InputMode);
+
+            PC->bShowMouseCursor = true;
+            PC->SetIgnoreLookInput(true);
+            PC->SetIgnoreMoveInput(true);
+        }
+        else
+        {
+            FInputModeGameOnly InputMode;
+            PC->SetInputMode(InputMode);
+
+            PC->bShowMouseCursor = false;
+            PC->SetIgnoreLookInput(false);
+            PC->SetIgnoreMoveInput(false);
+        }
+    }
+}
+
+void AARESMMOCharacter::AddInventoryPreviewYaw(float DeltaYaw)
+{
+	if (!InventoryPreviewPivot) return;
+
+	FRotator Rot = InventoryPreviewPivot->GetRelativeRotation();
+	Rot.Yaw += DeltaYaw * 0.5f;        // скорость вращения
+	InventoryPreviewPivot->SetRelativeRotation(Rot);
 }

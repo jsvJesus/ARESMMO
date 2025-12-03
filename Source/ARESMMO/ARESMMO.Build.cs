@@ -6,7 +6,7 @@ public class ARESMMO : ModuleRules
 {
 	public ARESMMO(ReadOnlyTargetRules Target) : base(Target)
 	{
-		PrivateDependencyModuleNames.AddRange(new string[] { });
+		PrivateDependencyModuleNames.AddRange(new string[] { "AnimGraphRuntime" });
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
 		PublicDependencyModuleNames.AddRange(new string[]
@@ -18,7 +18,8 @@ public class ARESMMO : ModuleRules
 			"EnhancedInput",
 			"UMG",
 			"Slate",
-			"SlateCore"
+			"SlateCore",
+			"AnimGraphRuntime"
 		});
 	}
 }

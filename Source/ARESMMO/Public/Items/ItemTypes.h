@@ -1,6 +1,7 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Animations/AnimType.h"
 #include "ItemTypes.generated.h"
 
 UENUM(BlueprintType)
@@ -236,5 +237,38 @@ static EEquipmentSlotType GetEquipmentSlotForCategory(EStoreCategory Category)
 
 	default:
 		return EEquipmentSlotType::None;
+	}
+}
+
+static inline EWeaponState GetWeaponStateForCategory(EStoreCategory Category)
+{
+	switch (Category)
+	{
+	case EStoreCategory::storecat_ASR:
+	case EStoreCategory::storecat_SNP:
+	case EStoreCategory::storecat_SMG:
+		return EWeaponState::Rifle;
+
+	case EStoreCategory::storecat_SHTG:
+	case EStoreCategory::storecat_MG:
+		return EWeaponState::Shotgun;
+
+	case EStoreCategory::storecat_HG:
+		return EWeaponState::Pistol;
+
+	case EStoreCategory::storecat_MELEE:
+		return EWeaponState::Melee;
+
+	case EStoreCategory::storecat_Grenade:
+		return EWeaponState::Grenade;
+
+	case EStoreCategory::storecat_PlaceItem:
+		return EWeaponState::PlaceItem;
+
+	case EStoreCategory::storecat_UsableItem:
+		return EWeaponState::UsableItem;
+
+	default:
+		return EWeaponState::Unarmed;
 	}
 }
