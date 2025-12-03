@@ -6,7 +6,6 @@
 #include "Items/ItemData.h"
 #include "ARESMMOCharacter.generated.h"
 
-class UAnimStateComponent;
 class UPlayerStatsComponent;
 class UGameHUDWidget;
 class UInventoryLayoutWidget;
@@ -173,10 +172,6 @@ public:
 	// ===== PLAYER STATS =====
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|Stats")
 	UPlayerStatsComponent* Stats;
-
-	// ===== Animations =====
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|Animation", meta=(AllowPrivateAccess="true"))
-	UAnimStateComponent* AnimStateComponent;
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|Movement")
 	float SprintStaminaCostPerSecond = 15.0f;

@@ -10,7 +10,6 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
-#include "Components/AnimStateComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/PlayerStatsComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -114,9 +113,6 @@ AARESMMOCharacter::AARESMMOCharacter()
 	// ===== Player StatsComponent =====
 	Stats = CreateDefaultSubobject<UPlayerStatsComponent>(TEXT("PlayerStats"));
 
-	// ===== Animations =====
-	AnimStateComponent = CreateDefaultSubobject<UAnimStateComponent>(TEXT("AnimStateComponent"));
-
 	// === SceneCapture для превью ===
 	InventoryPreviewPivot = CreateDefaultSubobject<USceneComponent>(TEXT("InventoryPreviewPivot"));
 	InventoryPreviewPivot->SetupAttachment(GetMesh());
@@ -197,13 +193,6 @@ void AARESMMOCharacter::BeginPlay()
 		// Полный аналог узла Show Only Actor Components (Self)
 		InventoryCapture->ShowOnlyActorComponents(this, true); // true = брать компоненты детей
 	}
-
-	if (AnimStateComponent)
-	{
-		// начальное состояние: стоим без оружия
-		AnimStateComponent->SetWeaponState(EWeaponState::Unarmed);
-		AnimStateComponent->UpdateMovementFlags(false, false, false, 0.f);
-	}
 }
 
 void AARESMMOCharacter::Tick(float DeltaSeconds)
@@ -219,16 +208,6 @@ void AARESMMOCharacter::Tick(float DeltaSeconds)
 		{
 			StopSprint();
 		}
-	}
-
-	// === ОБНОВЛЕНИЕ АНИМАЦИОННЫХ СОСТОЯНИЙ ДВИЖЕНИЯ ===
-	if (AnimStateComponent)
-	{
-		const bool bInAir    = GetCharacterMovement()->IsFalling();
-		const bool bInCrouch = GetCharacterMovement()->IsCrouching();
-		const float Speed    = GetVelocity().Size2D();
-
-		AnimStateComponent->UpdateMovementFlags(bIsSprinting, bInCrouch, bInAir, Speed);
 	}
 }
 
@@ -303,12 +282,8 @@ void AARESMMOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 
 void AARESMMOCharacter::Move(const FInputActionValue& Value)
 {
+	// input is a Vector2D
 	FVector2D MovementVector = Value.Get<FVector2D>();
-
-	if (AnimStateComponent)
-	{
-		AnimStateComponent->UpdateMoveInput(MovementVector);
-	}
 
 	if (Controller != nullptr)
 	{
@@ -319,7 +294,7 @@ void AARESMMOCharacter::Move(const FInputActionValue& Value)
 		const FVector RightDirection   = FRotationMatrix(YawRotation).GetUnitAxis(EAxis::Y);
 
 		AddMovementInput(ForwardDirection, MovementVector.Y);
-		AddMovementInput(RightDirection, MovementVector.X);
+		AddMovementInput(RightDirection,   MovementVector.X);
 	}
 }
 
@@ -480,14 +455,6 @@ void AARESMMOCharacter::EquipItem(const FItemBaseRow& ItemRow)
 	case EStoreCategory::storecat_Grenade:
 	case EStoreCategory::storecat_PlaceItem:
 	case EStoreCategory::storecat_UsableItem:
-		{
-			if (AnimStateComponent)
-			{
-				const EWeaponState NewWeaponState = GetWeaponStateForCategory(ItemRow.StoreCategory);
-				AnimStateComponent->SetWeaponState(NewWeaponState);
-			}
-			break;
-		}
 
 	default:
 		UE_LOG(LogTemp, Log, TEXT("EquipItem: Item %s (category %d) has no equip logic yet"),
