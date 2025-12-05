@@ -4,6 +4,7 @@
 #include "GameFramework/Character.h"
 #include "Logging/LogMacros.h"
 #include "Items/ItemData.h"
+#include "Animations/AnimType.h"
 #include "ARESMMOCharacter.generated.h"
 
 class UPlayerStatsComponent;
@@ -116,6 +117,9 @@ public:
 	FORCEINLINE class UCameraComponent* GetTPSCamera() const { return TPSCamera; }
 	FORCEINLINE class UCameraComponent* GetFPSCamera() const { return FPSCamera; }
 
+	UFUNCTION(BlueprintPure, Category="ARES|Camera")
+	bool IsFirstPerson() const { return bIsFirstPerson; }
+
 	// Поворот персонажа для превью
 	UFUNCTION(BlueprintCallable, Category="ARES|InventoryPreview")
 	void AddInventoryPreviewYaw(float DeltaYaw);
@@ -217,4 +221,16 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="ARES|Camera")
 	void StopAim();   // Zoom off
+
+	// ===== Weapon State (стойка оружия) =====
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="ARES|Anim")
+	EWeaponState WeaponState = EWeaponState::Unarmed; // Default стойка Unarmed
+
+	UFUNCTION(BlueprintCallable, Category="ARES|Anim")
+	void SetWeaponState(EWeaponState NewState);
+
+	UFUNCTION(BlueprintPure, Category="ARES|Anim")
+	EWeaponState GetWeaponState() const { return WeaponState; }
+
+	EWeaponState GetWeaponStateForCategory(EStoreCategory Category);
 };

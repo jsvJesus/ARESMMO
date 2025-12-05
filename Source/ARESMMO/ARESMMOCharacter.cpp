@@ -10,6 +10,7 @@
 #include "EnhancedInputComponent.h"
 #include "EnhancedInputSubsystems.h"
 #include "InputActionValue.h"
+#include "Animations/CharacterAnimInstance.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/PlayerStatsComponent.h"
 #include "Components/CapsuleComponent.h"
@@ -135,12 +136,7 @@ AARESMMOCharacter::AARESMMOCharacter()
 void AARESMMOCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-
-	if (USkeletalMeshComponent* MeshComp = GetMesh())
-	{
-		MeshComp->SetAnimationMode(EAnimationMode::AnimationSingleNode);
-	}
-
+	
 	// Сохраняем дефолтные настройки TPS камеры
 	if (CameraBoom)
 	{
@@ -435,32 +431,31 @@ void AARESMMOCharacter::EquipItem(const FItemBaseRow& ItemRow)
 	{
 	case EStoreCategory::storecat_HeroParts:
 		EquipHeroPart(ItemRow);
-		break;
+		return;
 
 	case EStoreCategory::storecat_Armor:
 	case EStoreCategory::storecat_Helmet:
 	case EStoreCategory::storecat_Mask:
 	case EStoreCategory::storecat_Backpack:
 		EquipEquipment(ItemRow);
-		break;
-
-		// Оружие / гранаты / плейсаблы — меняют WeaponState
-	case EStoreCategory::storecat_ASR:
-	case EStoreCategory::storecat_SNP:
-	case EStoreCategory::storecat_SHTG:
-	case EStoreCategory::storecat_HG:
-	case EStoreCategory::storecat_MG:
-	case EStoreCategory::storecat_SMG:
-	case EStoreCategory::storecat_MELEE:
-	case EStoreCategory::storecat_Grenade:
-	case EStoreCategory::storecat_PlaceItem:
-	case EStoreCategory::storecat_UsableItem:
+		return;
 
 	default:
-		UE_LOG(LogTemp, Log, TEXT("EquipItem: Item %s (category %d) has no equip logic yet"),
+		break;
+	}
+
+	// Всё остальное: оружие / спец-предметы
+	const EWeaponState NewState = GetWeaponStateForCategory(ItemRow.StoreCategory);
+
+	if (NewState != EWeaponState::Unarmed)
+	{
+		SetWeaponState(NewState);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Log, TEXT("EquipItem: Item %s (category %d) does not change WeaponState"),
 			   *ItemRow.InternalName.ToString(),
 			   static_cast<int32>(ItemRow.StoreCategory));
-		break;
 	}
 }
 
@@ -531,6 +526,51 @@ void AARESMMOCharacter::StopAim()
 	}
 }
 
+void AARESMMOCharacter::SetWeaponState(EWeaponState NewState)
+{
+	if (WeaponState == NewState)
+	{
+		return;
+	}
+
+	WeaponState = NewState;
+
+	UE_LOG(LogTemp, Log, TEXT("WeaponState set to %d"), static_cast<int32>(WeaponState));
+}
+
+EWeaponState AARESMMOCharacter::GetWeaponStateForCategory(EStoreCategory Category)
+{
+	switch (Category)
+	{
+	case EStoreCategory::storecat_ASR:
+	case EStoreCategory::storecat_SNP:
+	case EStoreCategory::storecat_MG:
+		return EWeaponState::Rifle;
+
+	case EStoreCategory::storecat_SHTG:
+		return EWeaponState::Shotgun;
+
+	case EStoreCategory::storecat_HG:
+	case EStoreCategory::storecat_SMG:
+		return EWeaponState::Pistol;
+
+	case EStoreCategory::storecat_MELEE:
+		return EWeaponState::Melee;
+
+	case EStoreCategory::storecat_Grenade:
+		return EWeaponState::Grenade;
+
+	case EStoreCategory::storecat_PlaceItem:
+		return EWeaponState::PlaceItem;
+
+	case EStoreCategory::storecat_UsableItem:
+		return EWeaponState::UsableItem;
+
+	default:
+		return EWeaponState::Unarmed;
+	}
+}
+
 void AARESMMOCharacter::StartSprint()
 {
 	if (UCharacterMovementComponent* Move = GetCharacterMovement())
@@ -577,7 +617,6 @@ void AARESMMOCharacter::SwitchToFPS()
 {
 	if (!FPSCamera || !TPSCamera) return;
 
-	// На всякий случай убираем Aim, чтобы не оставались zoom-значения
 	StopAim();
 
 	bIsFirstPerson = true;
@@ -586,10 +625,14 @@ void AARESMMOCharacter::SwitchToFPS()
 	TPSCamera->SetActive(false);
 	FPSCamera->SetActive(true);
 
-	// --- Вращение ---
+	// --- Вращение для FPS ---
 	bUseControllerRotationYaw = true;
+	if (UCharacterMovementComponent* Move = GetCharacterMovement())
+	{
+		Move->bOrientRotationToMovement = false;
+	}
 
-	// --- Скрываем голову / шлем / маску в FPS ---
+	// --- Скрываем шмотку на голове в FPS ---
 	//if (Mesh_Head)   Mesh_Head->SetVisibility(false, true);
 	if (Mesh_Helmet) Mesh_Helmet->SetVisibility(false, true);
 	if (Mesh_Mask)   Mesh_Mask->SetVisibility(false, true);
@@ -599,22 +642,32 @@ void AARESMMOCharacter::SwitchToTPS()
 {
 	if (!FPSCamera || !TPSCamera) return;
 
-	// Всегда выходим из Aim при смене вида
 	StopAim();
 
 	bIsFirstPerson = false;
 
-	// --- Камеры ---
 	TPSCamera->SetActive(true);
 	FPSCamera->SetActive(false);
 
-	// --- Вращение ---
-	bUseControllerRotationYaw = true;
+	// В TPS камера НЕ должна крутить персонажа!
+	bUseControllerRotationYaw = false;
 
-	// --- Возвращаем голову / шлем / маску ---
-	//if (Mesh_Head)   Mesh_Head->SetVisibility(true, true);
+	if (UCharacterMovementComponent* Move = GetCharacterMovement())
+	{
+		// TPS всегда должен крутиться по движению
+		Move->bOrientRotationToMovement = true;
+	}
+
+	// --- Отображаем шмотку на голове в TPS ---
+	//if (Mesh_Head)   Mesh_Head->SetVisibility(false, true);
 	if (Mesh_Helmet) Mesh_Helmet->SetVisibility(true, true);
 	if (Mesh_Mask)   Mesh_Mask->SetVisibility(true, true);
+
+	// Сброс TIP при возврате из FPS
+	if (UCharacterAnimInstance* Anim = Cast<UCharacterAnimInstance>(GetMesh()->GetAnimInstance()))
+	{
+		Anim->ForceResetTurnInPlace();
+	}
 }
 
 void AARESMMOCharacter::ToggleCameraMode()
