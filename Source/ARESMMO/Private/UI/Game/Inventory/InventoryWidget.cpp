@@ -192,7 +192,6 @@ void UInventoryWidget::CreateItemWidget(const FInventoryItemEntry& Entry)
 		return;
 	}
 
-	UItemSlotWidget* ItemWidget = CreateWidget<UItemSlotWidget>(GetWorld(), ItemWidgetClass);
 	ItemWidget->InitItem(Entry.ItemRow, Entry.SizeInCells);
 	ItemWidget->OnItemDoubleClicked.AddDynamic(this, &UInventoryWidget::HandleItemSlotDoubleClicked);
 
@@ -205,9 +204,6 @@ void UInventoryWidget::CreateItemWidget(const FInventoryItemEntry& Entry)
 	InvSlot->SetPosition(FVector2D(PosX, PosY));
 	InvSlot->SetSize(FVector2D(SizeX, SizeY));
 	InvSlot->SetZOrder(10);             // поверх пустых
-
-	// ВАЖНО: говорим слоту какой это предмет и какой размер в клетках
-	ItemWidget->InitItem(Entry.ItemRow, Entry.SizeInCells);
 
 	UE_LOG(LogTemp, Log, TEXT("CreateItemWidget: %s at (%d,%d) size %dx%d"),
 		*Entry.ItemRow.InternalName.ToString(),

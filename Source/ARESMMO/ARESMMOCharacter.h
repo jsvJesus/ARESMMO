@@ -114,14 +114,6 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|UI")
 	bool bIsInventoryOpen = false;
 
-	// ===== Equipment =====
-	UFUNCTION(BlueprintCallable, Category="ARES|Equipment")
-	bool UnequipSlot(EEquipmentSlotType SlotType);
-
-	// ===== Inventory / Fast Equip =====
-	UFUNCTION(BlueprintCallable, Category="ARES|Inventory")
-	bool EquipItemFromInventory(const FItemBaseRow& ItemRow);
-
 	// ===== Camera =====
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="ARES|Camera")
 	float TurnRate = 1.0f;
@@ -210,6 +202,14 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="ARES|Equipment")
 	void EquipItem(const FItemBaseRow& ItemRow);
+
+	// ===== Equipment =====
+	UFUNCTION(BlueprintCallable, Category="ARES|Equipment")
+	bool UnequipSlot(EEquipmentSlotType SlotType);
+
+	// ===== Inventory / Fast Equip =====
+	UFUNCTION(BlueprintCallable, Category="ARES|Inventory")
+	bool EquipItemFromInventory(const FItemBaseRow& ItemRow);
 
 	UFUNCTION(BlueprintCallable, Category="ARES|Inventory")
 	void UseItem(const FItemBaseRow& ItemRow);

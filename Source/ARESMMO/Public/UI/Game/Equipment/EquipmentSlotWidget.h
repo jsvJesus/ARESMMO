@@ -6,6 +6,7 @@
 #include "Items/ItemTypes.h"     // EEquipmentSlotType
 #include "EquipmentSlotWidget.generated.h"
 
+class UTextBlock;
 class UImage;
 class USizeBox;
 

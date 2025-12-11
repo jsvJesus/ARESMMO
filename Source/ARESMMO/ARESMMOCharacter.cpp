@@ -544,18 +544,13 @@ bool AARESMMOCharacter::EquipItemFromInventory(const FItemBaseRow& ItemRow)
 		return false;
 	}
 
-	// Пытаемся экипировать
-	if (!EquipItem(ItemRow))
-	{
-		UE_LOG(LogTemp, Warning, TEXT("EquipItemFromInventory: EquipItem failed for %s"),
-			*ItemRow.InternalName.ToString());
-		return false;
-	}
+	// ЭКИПИРУЕМ — функция ничего не возвращает
+	EquipItem(ItemRow);
 
-	// Если экипировка удалась — убираем из инвентаря
+	// Убираем предмет из инвентаря
 	InventoryItems.RemoveAt(FoundIndex);
 
-	// Обновляем UI
+	// Обновляем UI, если инвентарь открыт
 	if (InventoryLayoutWidgetInstance)
 	{
 		InventoryLayoutWidgetInstance->DistributeItems(InventoryItems);
