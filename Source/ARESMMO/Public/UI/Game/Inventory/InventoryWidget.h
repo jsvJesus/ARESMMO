@@ -5,8 +5,11 @@
 #include "Items/ItemData.h"
 #include "InventoryWidget.generated.h"
 
+class UItemSlotWidget;
 class UCanvasPanel;
 class UUserWidget;
+
+DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnInventoryItemEquipRequested, const FItemBaseRow&, ItemRow);
 
 /** Одна запись предмета в инвентаре (простая версия) */
 USTRUCT(BlueprintType)
@@ -42,7 +45,7 @@ public:
 
 	/** Виджет одного предмета (UMG — только картинка) */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|Inventory")
-	TSubclassOf<UUserWidget> ItemWidgetClass;
+	TSubclassOf<UItemSlotWidget> ItemWidgetClass;
 
 	/** Виджет пустого слота 64x64 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|Inventory")
@@ -77,6 +80,10 @@ public:
 	UFUNCTION(BlueprintCallable, Category="ARES|Inventory")
 	void RebuildInventory();
 
+	// Сигнал наружу: "по этому предмету в инвентаре даблкликнули — хотим одеть"
+	UPROPERTY(BlueprintAssignable, Category="ARES|Inventory")
+	FOnInventoryItemEquipRequested OnItemEquipRequested;
+
 protected:
 	virtual void NativeConstruct() override;
 
@@ -88,4 +95,10 @@ protected:
 
 	/** Создать один виджет предмета и положить на Canvas */
 	void CreateItemWidget(const FInventoryItemEntry& Entry);
+
+	/** Fix отображения предметов в Фильтр-Категории */
+	void PackItemsIntoLocalGrid(TArray<FInventoryItemEntry>& Items);
+
+	UFUNCTION()
+	void HandleItemSlotDoubleClicked(const FItemBaseRow& ItemRow);
 };

@@ -2,6 +2,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "ARESMMO/ARESMMOCharacter.h"
+#include "Components/BoxComponent.h"
 #include "Items/ItemData.h"
 #include "Items/ItemTypes.h"
 
@@ -18,21 +19,28 @@ AWorldItemActor::AWorldItemActor()
 	Root = CreateDefaultSubobject<USceneComponent>(TEXT("Root"));
 	SetRootComponent(Root);
 
-	StaticMeshComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("StaticMesh"));
-	StaticMeshComp->SetupAttachment(Root);
+	// ---- Коллизия ----
+	CollisionComp = CreateDefaultSubobject<UBoxComponent>(TEXT("Collision"));
+	CollisionComp->SetupAttachment(Root);
+	CollisionComp->SetBoxExtent(FVector(40.f, 40.f, 40.f)); // размер триггера
 
-	SkeletalMeshComp = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("SkeletalMesh"));
-	SkeletalMeshComp->SetupAttachment(Root);
+	// оверлап только с Pawn
+	CollisionComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
+	CollisionComp->SetGenerateOverlapEvents(true);
+	CollisionComp->SetCollisionObjectType(ECC_WorldDynamic);
+	CollisionComp->SetCollisionResponseToAllChannels(ECR_Ignore);
+	CollisionComp->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
 
-	// Включаем коллизию и оверлап с Pawn
 	SetActorEnableCollision(true);
 
-	StaticMeshComp->SetCollisionEnabled(ECollisionEnabled::QueryOnly);
-	StaticMeshComp->SetGenerateOverlapEvents(true);
-	StaticMeshComp->SetCollisionObjectType(ECC_WorldDynamic);
-	StaticMeshComp->SetCollisionResponseToAllChannels(ECR_Ignore);
-	StaticMeshComp->SetCollisionResponseToChannel(ECC_Pawn, ECR_Overlap);
+	// ---- Визуал: без коллизии ----
+	StaticMeshComp = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("StaticMesh"));
+	StaticMeshComp->SetupAttachment(CollisionComp);
+	StaticMeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	StaticMeshComp->SetGenerateOverlapEvents(false);
 
+	SkeletalMeshComp = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("SkeletalMesh"));
+	SkeletalMeshComp->SetupAttachment(CollisionComp);
 	SkeletalMeshComp->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	SkeletalMeshComp->SetGenerateOverlapEvents(false);
 }

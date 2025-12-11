@@ -1,7 +1,9 @@
 #include "UI/Game/Inventory/InventoryLayoutWidget.h"
 #include "UI/Game/Inventory/InventoryWidget.h"
+#include "UI/Game/Equipment/EquipmentWidget.h"
 #include "Components/WidgetSwitcher.h"
 #include "Components/Image.h"
+#include "Components/Button.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "InputCoreTypes.h"
 #include "ARESMMO/ARESMMOCharacter.h"
@@ -12,6 +14,35 @@ void UInventoryLayoutWidget::NativeConstruct()
 
 	// По умолчанию — вкладка "Все" (индекс 0)
 	ShowTab(0);
+
+	// Слушаем даблклики по слотам экипировки
+	if (EquipmentPanel)
+	{
+		EquipmentPanel->OnUnequipRequested.AddDynamic(this, &UInventoryLayoutWidget::HandleUnequipRequested);
+	}
+	
+	// --- Подписка на даблклик по предметам в инвентаре ---
+	auto BindInventory = [this](UInventoryWidget* InvWidget)
+	{
+		if (InvWidget)
+		{
+			InvWidget->OnItemEquipRequested.AddDynamic(
+				this,
+				&UInventoryLayoutWidget::HandleInventoryItemEquipRequested
+			);
+		}
+	};
+
+	BindInventory(Inv_All);
+	BindInventory(Inv_Weapon);
+	BindInventory(Inv_Armor);
+	BindInventory(Inv_Helmet);
+	BindInventory(Inv_Medic);
+	BindInventory(Inv_Food);
+	BindInventory(Inv_Items);
+	BindInventory(Inv_Devices);
+	BindInventory(Inv_Craft);
+	BindInventory(Inv_Attm);
 }
 
 void UInventoryLayoutWidget::ShowTab(int32 TabIndex)
@@ -21,26 +52,89 @@ void UInventoryLayoutWidget::ShowTab(int32 TabIndex)
 		return;
 	}
 
+	// Проверка индекса
 	if (TabIndex < 0 || TabIndex >= InventorySwitcher->GetNumWidgets())
 	{
 		return;
 	}
 
+	// Переключаем вкладку в WidgetSwitcher
 	InventorySwitcher->SetActiveWidgetIndex(TabIndex);
+
+	// Запоминаем активную вкладку
+	CurrentTabIndex = TabIndex;
+
+	// Обновляем визуал всех кнопок
+	UpdateTabButtons();
+}
+
+void UInventoryLayoutWidget::UpdateTabButtons()
+{
+	// Вспомогательная функция — клонируем базовый стиль и подставляем свою картинку
+	auto ApplyStyleWithIcon = [this](UButton* Btn, int32 Index, UTexture2D* Icon)
+	{
+		if (!Btn)
+		{
+			return;
+		}
+
+		const bool bIsActive = (Index == CurrentTabIndex);
+
+		// Берём базовый стиль
+		FButtonStyle StyleToApply = bIsActive ? TabActiveBaseStyle : TabNormalBaseStyle;
+
+		// Подставляем нужную иконку во все состояния
+		if (Icon)
+		{
+			auto SetBrushIcon = [Icon](FSlateBrush& Brush)
+			{
+				Brush.SetResourceObject(Icon);
+				Brush.ImageSize = FVector2D(
+					static_cast<float>(Icon->GetSizeX()),
+					static_cast<float>(Icon->GetSizeY())
+				);
+			};
+
+			SetBrushIcon(StyleToApply.Normal);
+			SetBrushIcon(StyleToApply.Hovered);
+			SetBrushIcon(StyleToApply.Pressed);
+		}
+
+		Btn->SetStyle(StyleToApply);
+	};
+
+	ApplyStyleWithIcon(Btn_All,     0, Icon_All);
+	ApplyStyleWithIcon(Btn_Weapon,  1, Icon_Weapon);
+	ApplyStyleWithIcon(Btn_Armor,   2, Icon_Armor);
+	ApplyStyleWithIcon(Btn_Helmet,  3, Icon_Helmet);
+	ApplyStyleWithIcon(Btn_Medic,   4, Icon_Medic);
+	ApplyStyleWithIcon(Btn_Food,    5, Icon_Food);
+	ApplyStyleWithIcon(Btn_Items,   6, Icon_Items);
+	ApplyStyleWithIcon(Btn_Devices, 7, Icon_Devices);
+	ApplyStyleWithIcon(Btn_Craft,   8, Icon_Craft);
+	ApplyStyleWithIcon(Btn_Attm,    9, Icon_Attm);
 }
 
 void UInventoryLayoutWidget::DistributeItems(const TArray<FInventoryItemEntry>& AllItems)
 {
-	if (Inv_All)    Inv_All->SetAllItems(AllItems);
-	if (Inv_Weapon) Inv_Weapon->SetAllItems(AllItems);
-	if (Inv_Armor)  Inv_Armor->SetAllItems(AllItems);
-	if (Inv_Helmet) Inv_Helmet->SetAllItems(AllItems);
-	if (Inv_Medic)  Inv_Medic->SetAllItems(AllItems);
-	if (Inv_Food)   Inv_Food->SetAllItems(AllItems);
-	if (Inv_Items)  Inv_Items->SetAllItems(AllItems);
-	if (Inv_Devices)Inv_Devices->SetAllItems(AllItems);
-	if (Inv_Craft)  Inv_Craft->SetAllItems(AllItems);
-	if (Inv_Attm)   Inv_Attm->SetAllItems(AllItems);
+	if (Inv_All)    Inv_All->SetAllItems(AllItems); // All
+	if (Inv_Weapon) Inv_Weapon->SetAllItems(AllItems); // Weapon
+	if (Inv_Armor)  Inv_Armor->SetAllItems(AllItems); // Armor
+	if (Inv_Helmet) Inv_Helmet->SetAllItems(AllItems); // Cloth
+	if (Inv_Medic)  Inv_Medic->SetAllItems(AllItems); // Medicine
+	if (Inv_Food)   Inv_Food->SetAllItems(AllItems); // Food
+	if (Inv_Items)  Inv_Items->SetAllItems(AllItems); // Items
+	if (Inv_Devices)Inv_Devices->SetAllItems(AllItems); // Device
+	if (Inv_Craft)  Inv_Craft->SetAllItems(AllItems); // Craft
+	if (Inv_Attm)   Inv_Attm->SetAllItems(AllItems); // Attm
+}
+
+void UInventoryLayoutWidget::SetEquipment(const TMap<EEquipmentSlotType, FItemBaseRow>& Equipment)
+{
+	if (EquipmentPanel)
+	{
+		EquipmentPanel->SetEquipment(Equipment);
+	}
 }
 
 void UInventoryLayoutWidget::SetPlayerImage(UTextureRenderTarget2D* RenderTarget)
@@ -104,5 +198,31 @@ void UInventoryLayoutWidget::InitPreview(class AARESMMOCharacter* Character)
 	if (UTextureRenderTarget2D* RT = Character->InventoryRenderTarget)
 	{
 		SetPlayerImage(RT);
+	}
+}
+
+void UInventoryLayoutWidget::HandleUnequipRequested(EEquipmentSlotType SlotType)
+{
+	if (!PreviewCharacter.IsValid())
+	{
+		return;
+	}
+
+	if (AARESMMOCharacter* Char = PreviewCharacter.Get())
+	{
+		Char->UnequipSlot(SlotType);
+	}
+}
+
+void UInventoryLayoutWidget::HandleInventoryItemEquipRequested(const FItemBaseRow& ItemRow)
+{
+	if (!PreviewCharacter.IsValid())
+	{
+		return;
+	}
+
+	if (AARESMMOCharacter* Char = PreviewCharacter.Get())
+	{
+		Char->EquipItemFromInventory(ItemRow);
 	}
 }

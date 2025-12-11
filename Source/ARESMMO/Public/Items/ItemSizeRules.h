@@ -25,7 +25,7 @@ public:
 			case EItemClass::Mask:       return FItemSize(2,2);
 			case EItemClass::Backpack:   return FItemSize(2,2);
 
-			case EItemClass::Weapon:     return FItemSize(2,4);
+			case EItemClass::Weapon:     return FItemSize(4,2);
 			case EItemClass::Grenade:    return FItemSize(1,1);
 			case EItemClass::Melee:      return FItemSize(2,2);
 

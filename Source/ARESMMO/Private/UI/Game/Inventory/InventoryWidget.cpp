@@ -2,6 +2,7 @@
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Blueprint/UserWidget.h"
+#include "UI/Game/Inventory/ItemSlotWidget.h"
 
 void UInventoryWidget::NativeConstruct()
 {
@@ -45,6 +46,13 @@ void UInventoryWidget::RebuildInventory()
 	else
 	{
 		Filtered = AllItems;
+	}
+
+	//  - вкладка "All" (без фильтра) показывает реальные координаты из инвентаря
+	//  - остальные вкладки уплотняем с (0,0)
+	if (bUseFilter)
+	{
+		PackItemsIntoLocalGrid(Filtered);
 	}
 
 	UE_LOG(LogTemp, Log, TEXT("InventoryWidget::RebuildInventory: Filtered=%d"), Filtered.Num());
@@ -138,7 +146,7 @@ void UInventoryWidget::BuildEmptySlots(const TArray<FInventoryItemEntry>& Source
 			CanvasSlot->SetAutoSize(false);
 			CanvasSlot->SetPosition(FVector2D(PosX, PosY));
 			CanvasSlot->SetSize(FVector2D(CellSize, CellSize));
-			CanvasSlot->SetZOrder(0);
+			CanvasSlot->SetZOrder(-1);
 
 			++CreatedSlots;
 		}
@@ -157,31 +165,142 @@ void UInventoryWidget::BuildFromItems(const TArray<FInventoryItemEntry>& SourceI
 
 void UInventoryWidget::CreateItemWidget(const FInventoryItemEntry& Entry)
 {
-	if (!InventoryCanvas || !ItemWidgetClass)
+	if (!InventoryCanvas)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("CreateItemWidget: InventoryCanvas is null"));
 		return;
 	}
 
-	UUserWidget* ItemWidget = CreateWidget<UUserWidget>(GetWorld(), ItemWidgetClass);
+	if (!ItemWidgetClass)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("CreateItemWidget: ItemWidgetClass is not set"));
+		return;
+	}
+
+	// создаём КОНКРЕТНО UItemSlotWidget
+	UItemSlotWidget* ItemWidget = CreateWidget<UItemSlotWidget>(GetWorld(), ItemWidgetClass);
 	if (!ItemWidget)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("CreateItemWidget: failed to create ItemSlotWidget"));
 		return;
 	}
 
 	UCanvasPanelSlot* InvSlot = InventoryCanvas->AddChildToCanvas(ItemWidget);
 	if (!InvSlot)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("CreateItemWidget: AddChildToCanvas failed"));
 		return;
 	}
 
-	const float PosX = static_cast<float>(Entry.CellX) * CellSize;
-	const float PosY = static_cast<float>(Entry.CellY) * CellSize;
+	UItemSlotWidget* ItemWidget = CreateWidget<UItemSlotWidget>(GetWorld(), ItemWidgetClass);
+	ItemWidget->InitItem(Entry.ItemRow, Entry.SizeInCells);
+	ItemWidget->OnItemDoubleClicked.AddDynamic(this, &UInventoryWidget::HandleItemSlotDoubleClicked);
 
-	const float SizeX = static_cast<float>(Entry.SizeInCells.Width)  * CellSize;
-	const float SizeY = static_cast<float>(Entry.SizeInCells.Height) * CellSize;
+	const float PosX = Entry.CellX * CellSize;
+	const float PosY = Entry.CellY * CellSize;
+	const float SizeX = Entry.SizeInCells.Width  * CellSize;
+	const float SizeY = Entry.SizeInCells.Height * CellSize;
 
 	InvSlot->SetAutoSize(false);
 	InvSlot->SetPosition(FVector2D(PosX, PosY));
 	InvSlot->SetSize(FVector2D(SizeX, SizeY));
-	InvSlot->SetZOrder(1); // предмет поверх пустых слотов
+	InvSlot->SetZOrder(10);             // поверх пустых
+
+	// ВАЖНО: говорим слоту какой это предмет и какой размер в клетках
+	ItemWidget->InitItem(Entry.ItemRow, Entry.SizeInCells);
+
+	UE_LOG(LogTemp, Log, TEXT("CreateItemWidget: %s at (%d,%d) size %dx%d"),
+		*Entry.ItemRow.InternalName.ToString(),
+		Entry.CellX, Entry.CellY,
+		Entry.SizeInCells.Width, Entry.SizeInCells.Height);
+}
+
+void UInventoryWidget::PackItemsIntoLocalGrid(TArray<FInventoryItemEntry>& Items)
+{
+	const int32 WidthCells  = InventoryWidthCells;
+	const int32 HeightCells = InventoryHeightCells;
+
+	if (WidthCells <= 0 || HeightCells <= 0)
+	{
+		return;
+	}
+
+	TArray<bool> Occupied;
+	Occupied.Init(false, WidthCells * HeightCells);
+
+	auto CanPlace = [&](int32 StartX, int32 StartY, const FInventoryItemEntry& Entry) -> bool
+	{
+		const int32 SizeX = Entry.SizeInCells.Width;
+		const int32 SizeY = Entry.SizeInCells.Height;
+
+		for (int32 LocalX = 0; LocalX < SizeX; ++LocalX)
+		{
+			for (int32 LocalY = 0; LocalY < SizeY; ++LocalY)
+			{
+				const int32 X = StartX + LocalX;
+				const int32 Y = StartY + LocalY;
+
+				if (X < 0 || X >= WidthCells || Y < 0 || Y >= HeightCells)
+				{
+					return false;
+				}
+
+				const int32 Index = Y * WidthCells + X;
+				if (Occupied[Index])
+				{
+					return false;
+				}
+			}
+		}
+		return true;
+	};
+
+	auto MarkPlaced = [&](int32 StartX, int32 StartY, const FInventoryItemEntry& Entry)
+	{
+		const int32 SizeX = Entry.SizeInCells.Width;
+		const int32 SizeY = Entry.SizeInCells.Height;
+
+		for (int32 LocalX = 0; LocalX < SizeX; ++LocalX)
+		{
+			for (int32 LocalY = 0; LocalY < SizeY; ++LocalY)
+			{
+				const int32 X = StartX + LocalX;
+				const int32 Y = StartY + LocalY;
+				const int32 Index = Y * WidthCells + X;
+				Occupied[Index] = true;
+			}
+		}
+	};
+
+	for (FInventoryItemEntry& Entry : Items)
+	{
+		bool bPlaced = false;
+
+		for (int32 Y = 0; Y < HeightCells && !bPlaced; ++Y)
+		{
+			for (int32 X = 0; X < WidthCells && !bPlaced; ++X)
+			{
+				if (CanPlace(X, Y, Entry))
+				{
+					Entry.CellX = X;
+					Entry.CellY = Y;
+
+					MarkPlaced(X, Y, Entry);
+					bPlaced = true;
+				}
+			}
+		}
+
+		if (!bPlaced)
+		{
+			UE_LOG(LogTemp, Warning,
+				TEXT("PackItemsIntoLocalGrid: cannot place item %s"),
+				*Entry.ItemRow.InternalName.ToString());
+		}
+	}
+}
+
+void UInventoryWidget::HandleItemSlotDoubleClicked(const FItemBaseRow& ItemRow)
+{
+	OnItemEquipRequested.Broadcast(ItemRow);
 }

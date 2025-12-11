@@ -22,6 +22,50 @@
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
+// ======================= LOCAL HELPER =======================
+// Автовыбор слота для оружия (Weapon1/Weapon2) и девайсов (Device1/Device2)
+static EEquipmentSlotType ResolveAutoSlot(
+	EEquipmentSlotType DesiredSlot,
+	const TMap<EEquipmentSlotType, FItemBaseRow>& CurrentEquip)
+{
+	// --- Группа основных пушек ---
+	if (DesiredSlot == EEquipmentSlotType::EquipmentSlotWeapon1 ||
+		DesiredSlot == EEquipmentSlotType::EquipmentSlotWeapon2)
+	{
+		const bool bHas1 = CurrentEquip.Contains(EEquipmentSlotType::EquipmentSlotWeapon1);
+		const bool bHas2 = CurrentEquip.Contains(EEquipmentSlotType::EquipmentSlotWeapon2);
+
+		if (!bHas1)
+			return EEquipmentSlotType::EquipmentSlotWeapon1;
+
+		if (!bHas2)
+			return EEquipmentSlotType::EquipmentSlotWeapon2;
+
+		// Оба заняты — пока просто возвращаем Weapon1
+		// (позже можно сделать логика «выкинуть/переложить»)
+		return EEquipmentSlotType::EquipmentSlotWeapon1;
+	}
+
+	// --- Группа девайсов ---
+	if (DesiredSlot == EEquipmentSlotType::EquipmentSlotDevice1 ||
+		DesiredSlot == EEquipmentSlotType::EquipmentSlotDevice2)
+	{
+		const bool bHas1 = CurrentEquip.Contains(EEquipmentSlotType::EquipmentSlotDevice1);
+		const bool bHas2 = CurrentEquip.Contains(EEquipmentSlotType::EquipmentSlotDevice2);
+
+		if (!bHas1)
+			return EEquipmentSlotType::EquipmentSlotDevice1;
+
+		if (!bHas2)
+			return EEquipmentSlotType::EquipmentSlotDevice2;
+
+		return EEquipmentSlotType::EquipmentSlotDevice1;
+	}
+
+	// Для остальных слотов ничего умного не делаем
+	return DesiredSlot;
+}
+
 //////////////////////////////////////////////////////////////////////////
 // AARESMMOCharacter
 AARESMMOCharacter::AARESMMOCharacter()
@@ -459,6 +503,134 @@ void AARESMMOCharacter::EquipItem(const FItemBaseRow& ItemRow)
 			   *ItemRow.InternalName.ToString(),
 			   static_cast<int32>(ItemRow.StoreCategory));
 	}
+
+	// Определяем базовый слот по DataTable или по категории
+	EEquipmentSlotType Slot = ItemRow.EquipmentSlot;
+	if (Slot == EEquipmentSlotType::None)
+	{
+		Slot = GetEquipmentSlotForCategory(ItemRow.StoreCategory);
+	}
+
+	// Автологика Weapon1/Weapon2, Device1/Device2
+	Slot = ResolveAutoSlot(Slot, EquipmentSlots);
+
+	// Если слот валидный — кладём предмет туда
+	if (Slot != EEquipmentSlotType::None)
+	{
+		EquipmentSlots.FindOrAdd(Slot) = ItemRow;
+
+		// Обновляем UI
+		if (InventoryLayoutWidgetInstance)
+		{
+			InventoryLayoutWidgetInstance->SetEquipment(EquipmentSlots);
+		}
+	}
+}
+
+bool AARESMMOCharacter::EquipItemFromInventory(const FItemBaseRow& ItemRow)
+{
+	// Ищем предмет в инвентаре (по InternalName)
+	int32 FoundIndex = InventoryItems.IndexOfByPredicate(
+		[&ItemRow](const FInventoryItemEntry& Entry)
+		{
+			return Entry.ItemRow.InternalName == ItemRow.InternalName;
+		}
+	);
+
+	if (FoundIndex == INDEX_NONE)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("EquipItemFromInventory: item %s not found in inventory"),
+			*ItemRow.InternalName.ToString());
+		return false;
+	}
+
+	// Пытаемся экипировать
+	if (!EquipItem(ItemRow))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("EquipItemFromInventory: EquipItem failed for %s"),
+			*ItemRow.InternalName.ToString());
+		return false;
+	}
+
+	// Если экипировка удалась — убираем из инвентаря
+	InventoryItems.RemoveAt(FoundIndex);
+
+	// Обновляем UI
+	if (InventoryLayoutWidgetInstance)
+	{
+		InventoryLayoutWidgetInstance->DistributeItems(InventoryItems);
+		InventoryLayoutWidgetInstance->SetEquipment(EquipmentSlots);
+	}
+
+	return true;
+}
+
+bool AARESMMOCharacter::UnequipSlot(EEquipmentSlotType SlotType)
+{
+	FItemBaseRow RemovedItem;
+
+	if (FItemBaseRow* Found = EquipmentSlots.Find(SlotType))
+	{
+		RemovedItem = *Found;
+		EquipmentSlots.Remove(SlotType);
+	}
+	else
+	{
+		UE_LOG(LogTemp, Warning, TEXT("UnequipSlot: Slot %d is empty"), static_cast<int32>(SlotType));
+		return false;
+	}
+
+	// Сбрасываем визуальные меши, если нужно
+	switch (SlotType)
+	{
+	case EEquipmentSlotType::EquipmentSlotHelmet:
+		if (Mesh_Helmet)   Mesh_Helmet->SetSkeletalMesh(nullptr);
+		break;
+	case EEquipmentSlotType::EquipmentSlotArmor:
+		if (Mesh_Armor)    Mesh_Armor->SetSkeletalMesh(nullptr);
+		break;
+	case EEquipmentSlotType::EquipmentSlotMask:
+		if (Mesh_Mask)     Mesh_Mask->SetSkeletalMesh(nullptr);
+		break;
+	case EEquipmentSlotType::EquipmentSlotBackpack:
+		if (Mesh_Backpack) Mesh_Backpack->SetSkeletalMesh(nullptr);
+		break;
+
+	case EEquipmentSlotType::EquipmentSlotHead:
+		if (Mesh_Head)  Mesh_Head->SetSkeletalMesh(nullptr);
+		break;
+	case EEquipmentSlotType::EquipmentSlotBody:
+		if (Mesh_Body)  Mesh_Body->SetSkeletalMesh(nullptr);
+		break;
+	case EEquipmentSlotType::EquipmentSlotLegs:
+		if (Mesh_Legs)  Mesh_Legs->SetSkeletalMesh(nullptr);
+		break;
+
+	default:
+		break;
+	}
+
+	// TODO: пересчитать WeaponState в зависимости от того, что осталось в Weapon1/Weapon2
+
+	// Пытаемся вернуть предмет в инвентарь
+	const bool bAdded = AddItemToInventory(RemovedItem, 1);
+	if (!bAdded)
+	{
+		// нет места — откатываем (чтоб не терять предмет)
+		EquipmentSlots.Add(SlotType, RemovedItem);
+		EquipItem(RemovedItem); // вернём визуал/weapon state
+		UE_LOG(LogTemp, Warning, TEXT("UnequipSlot: no space in inventory for %s, reverting"),
+			*RemovedItem.InternalName.ToString());
+		return false;
+	}
+
+	// Обновляем панель экипировки в UI
+	if (InventoryLayoutWidgetInstance)
+	{
+		InventoryLayoutWidgetInstance->SetEquipment(EquipmentSlots);
+	}
+
+	return true;
 }
 
 void AARESMMOCharacter::UseItem(const FItemBaseRow& ItemRow)
@@ -710,6 +882,8 @@ void AARESMMOCharacter::ToggleInventory()
 
 			// ПЕРЕДАЁМ ТЕКУЩИЙ ИНВЕНТАРЬ
 			InventoryLayoutWidgetInstance->DistributeItems(InventoryItems);
+			// ПЕРЕДАЁМ ТЕКУЩИЕ СЛОТЫ ЭКИПИРОВКИ
+			InventoryLayoutWidgetInstance->SetEquipment(EquipmentSlots);
 
 			bIsInventoryOpen = true;
 		}
@@ -727,6 +901,7 @@ void AARESMMOCharacter::ToggleInventory()
     	{
     		InventoryLayoutWidgetInstance->InitPreview(this);
     		InventoryLayoutWidgetInstance->DistributeItems(InventoryItems);
+    		InventoryLayoutWidgetInstance->SetEquipment(EquipmentSlots);
     	}
 
         bIsInventoryOpen = bNewOpen;
@@ -858,6 +1033,7 @@ bool AARESMMOCharacter::AddItemToInventory(const FItemBaseRow& ItemRow, int32 St
 				{
 					UE_LOG(LogTemp, Warning, TEXT("AddItemToInventory: DistributeItems, count=%d"), InventoryItems.Num());
 					InventoryLayoutWidgetInstance->DistributeItems(InventoryItems);
+					InventoryLayoutWidgetInstance->SetEquipment(EquipmentSlots);
 				}
 
 				return true;

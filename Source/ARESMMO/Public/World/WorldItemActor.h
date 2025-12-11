@@ -21,6 +21,9 @@ protected:
 	USceneComponent* Root;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
+	class UBoxComponent* CollisionComp;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")
 	UStaticMeshComponent* StaticMeshComp;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Components")

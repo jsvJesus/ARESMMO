@@ -114,6 +114,15 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|UI")
 	bool bIsInventoryOpen = false;
 
+	// ===== Equipment =====
+	UFUNCTION(BlueprintCallable, Category="ARES|Equipment")
+	bool UnequipSlot(EEquipmentSlotType SlotType);
+
+	// ===== Inventory / Fast Equip =====
+	UFUNCTION(BlueprintCallable, Category="ARES|Inventory")
+	bool EquipItemFromInventory(const FItemBaseRow& ItemRow);
+
+	// ===== Camera =====
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="ARES|Camera")
 	float TurnRate = 1.0f;
 

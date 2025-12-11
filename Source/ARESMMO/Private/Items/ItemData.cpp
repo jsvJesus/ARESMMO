@@ -3,7 +3,7 @@
 
 namespace ItemDB
 {
-	// Путь к DataTable в контенте. Позже поменяешь под своё расположение.
+	// Путь к DataTable в контенте
 	static const TCHAR* ItemsDataTablePath = TEXT("/Game/ARESMMO/DataTable/DT_Items.DT_Items");
 
 	static UDataTable* G_ItemsTable = nullptr;
