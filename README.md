@@ -27,5 +27,8 @@ List of what is implemented in this package:
 8. Released Equip/Dequip Item from Inventory/Equipment Widget.
 9. Fix Equip/Dequip System.
 
+<img width="1914" height="1029" alt="image" src="https://github.com/user-attachments/assets/ed10ace5-50be-4cb8-8594-41866282d30f" />
+
+
 You can watch a presentation of what has already been implemented in the game on the channel:
   - [https://www.youtube.com/watch?v=CPt1hqYdbEA](https://www.youtube.com/playlist?list=PLzmlsTIoWB950MGgIKF6yFqPzRIbmUfHQ)
