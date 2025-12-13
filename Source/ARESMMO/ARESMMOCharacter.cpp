@@ -66,6 +66,17 @@ static EEquipmentSlotType ResolveAutoSlot(
 	return DesiredSlot;
 }
 
+static EEquipmentSlotType GetHeroPartSlot(EHeroPartType HeroPartType)
+{
+	switch (HeroPartType)
+	{
+	case EHeroPartType::Head: return EEquipmentSlotType::EquipmentSlotHead;
+	case EHeroPartType::Body: return EEquipmentSlotType::EquipmentSlotBody;
+	case EHeroPartType::Legs: return EEquipmentSlotType::EquipmentSlotLegs;
+	default:                  return EEquipmentSlotType::None;
+	}
+}
+
 //////////////////////////////////////////////////////////////////////////
 // AARESMMOCharacter
 AARESMMOCharacter::AARESMMOCharacter()
@@ -142,6 +153,19 @@ AARESMMOCharacter::AARESMMOCharacter()
 	Mesh_Backpack->SetupAttachment(GetMesh());
 	Mesh_Backpack->SetLeaderPoseComponent(GetMesh());
 
+	// ===== Weapon Visual Meshes =====
+	Mesh_Rifle = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Mesh_Rifle"));
+	Mesh_Rifle->SetupAttachment(GetMesh(), TEXT("Rifle_Socket"));
+	Mesh_Rifle->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Mesh_Rifle->SetGenerateOverlapEvents(false);
+	Mesh_Rifle->SetVisibility(false, true);
+
+	Mesh_Pistol = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Mesh_Pistol"));
+	Mesh_Pistol->SetupAttachment(GetMesh(), TEXT("Pistol_Socket"));
+	Mesh_Pistol->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Mesh_Pistol->SetGenerateOverlapEvents(false);
+	Mesh_Pistol->SetVisibility(false, true);
+
 	// Create a FPS Camera
 	FPSCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FPSCamera"));
 	FPSCamera->SetupAttachment(GetMesh(), TEXT("head")); // имя сокета головы своё
@@ -210,6 +234,20 @@ void AARESMMOCharacter::BeginPlay()
 		}
 	}
 
+	// Кешируем стандартные меши героя
+	if (Mesh_Head)
+	{
+		DefaultHeadMesh = Mesh_Head->GetSkeletalMeshAsset();
+	}
+	if (Mesh_Body)
+	{
+		DefaultBodyMesh = Mesh_Body->GetSkeletalMeshAsset();
+	}
+	if (Mesh_Legs)
+	{
+		DefaultLegsMesh = Mesh_Legs->GetSkeletalMeshAsset();
+	}
+
 	if (InventoryRenderTarget)
 	{
 		InventoryCapture->TextureTarget = InventoryRenderTarget;
@@ -225,6 +263,10 @@ void AARESMMOCharacter::BeginPlay()
 		InventoryCapture->ShowOnlyComponents.Add(Mesh_Helmet);
 		InventoryCapture->ShowOnlyComponents.Add(Mesh_Mask);
 		InventoryCapture->ShowOnlyComponents.Add(Mesh_Backpack);
+
+		// ===== Weapon Visual Meshes =====
+		InventoryCapture->ShowOnlyComponents.Add(Mesh_Rifle);
+		InventoryCapture->ShowOnlyComponents.Add(Mesh_Pistol);
 	}
 
 	if (InventoryCapture && InventoryRenderTarget)
@@ -409,120 +451,197 @@ void AARESMMOCharacter::Crouching(const FInputActionValue& Value)
 
 void AARESMMOCharacter::EquipHeroPart(const FItemBaseRow& ItemRow)
 {
-	if (ItemRow.HeroPartType == EHeroPartType::None || !ItemRow.HeroPartMesh)
+	if (ItemRow.HeroPartType == EHeroPartType::None)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("EquipHeroPart: Invalid item or mesh."));
+		UE_LOG(LogTemp, Warning, TEXT("EquipHeroPart: Invalid item type."));
 		return;
 	}
 
 	switch (ItemRow.HeroPartType)
 	{
 	case EHeroPartType::Head:
-		Mesh_Head->SetSkeletalMesh(ItemRow.HeroPartMesh);
+		if (Mesh_Head)
+		{
+			Mesh_Head->SetSkeletalMesh(ItemRow.HeroPartMesh);
+		}
 		break;
 
 	case EHeroPartType::Body:
-		Mesh_Body->SetSkeletalMesh(ItemRow.HeroPartMesh);
+		if (Mesh_Body)
+		{
+			Mesh_Body->SetSkeletalMesh(ItemRow.HeroPartMesh);
+		}
 		break;
 
 	case EHeroPartType::Legs:
-		Mesh_Legs->SetSkeletalMesh(ItemRow.HeroPartMesh);
+		if (Mesh_Legs)
+		{
+			Mesh_Legs->SetSkeletalMesh(ItemRow.HeroPartMesh);
+		}
 		break;
 	default: ;
 	}
 
-	UE_LOG(LogTemp, Log, TEXT("Equipped mesh for part: %d"), (int)ItemRow.HeroPartType);
+	if (!ItemRow.HeroPartMesh)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("EquipHeroPart: Mesh is not assigned for item %s"),
+				*ItemRow.InternalName.ToString());
+	}
+	else
+	{
+		UE_LOG(LogTemp, Log, TEXT("Equipped mesh for part: %d"), (int)ItemRow.HeroPartType);
+	}
 }
 
 void AARESMMOCharacter::EquipEquipment(const FItemBaseRow& ItemRow)
 {
-	if (!ItemRow.HeroPartMesh)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("EquipEquipment: Invalid mesh for item %s"),
-			*ItemRow.InternalName.ToString());
-		return;
-	}
-
 	switch (ItemRow.StoreCategory)
 	{
 	case EStoreCategory::storecat_Armor:
-		Mesh_Armor->SetSkeletalMesh(ItemRow.HeroPartMesh);
+		if (Mesh_Armor)
+		{
+			Mesh_Armor->SetSkeletalMesh(ItemRow.HeroPartMesh);
+		}
 		break;
 
 	case EStoreCategory::storecat_Helmet:
-		Mesh_Helmet->SetSkeletalMesh(ItemRow.HeroPartMesh);
+		if (Mesh_Helmet)
+		{
+			Mesh_Helmet->SetSkeletalMesh(ItemRow.HeroPartMesh);
+		}
 		break;
 
 	case EStoreCategory::storecat_Mask:
-		Mesh_Mask->SetSkeletalMesh(ItemRow.HeroPartMesh);
+		if (Mesh_Mask)
+		{
+			Mesh_Mask->SetSkeletalMesh(ItemRow.HeroPartMesh);
+		}
 		break;
 
 	case EStoreCategory::storecat_Backpack:
-		Mesh_Backpack->SetSkeletalMesh(ItemRow.HeroPartMesh);
+		if (Mesh_Backpack)
+		{
+			Mesh_Backpack->SetSkeletalMesh(ItemRow.HeroPartMesh);
+		}
 		break;
 
 	default:
-		UE_LOG(LogTemp, Warning, TEXT("EquipEquipment: Item %s is not wearable"),
-			*ItemRow.InternalName.ToString());
-		return;
+		if (!ItemRow.HeroPartMesh)
+		{
+			UE_LOG(LogTemp, Warning, TEXT("EquipEquipment: Invalid mesh for item %s"),
+					*ItemRow.InternalName.ToString());
+		}
+		else
+		{
+			UE_LOG(LogTemp, Log, TEXT("Equipped equipment: %s"),
+					   *ItemRow.InternalName.ToString());
+		}
 	}
-
-	UE_LOG(LogTemp, Log, TEXT("Equipped equipment: %s"),
-		   *ItemRow.InternalName.ToString());
 }
 
 void AARESMMOCharacter::EquipItem(const FItemBaseRow& ItemRow)
 {
-	switch (ItemRow.StoreCategory)
+    const bool bIsHeroPart =
+        (ItemRow.StoreCategory == EStoreCategory::storecat_HeroParts);
+
+    const bool bIsGear =
+        (ItemRow.StoreCategory == EStoreCategory::storecat_Armor  ||
+         ItemRow.StoreCategory == EStoreCategory::storecat_Helmet ||
+         ItemRow.StoreCategory == EStoreCategory::storecat_Mask   ||
+         ItemRow.StoreCategory == EStoreCategory::storecat_Backpack);
+
+    // 1) Визуал на персонаже
+    if (bIsHeroPart)
+    {
+        // голова/тело/ноги
+        EquipHeroPart(ItemRow);
+    }
+    else if (bIsGear)
+    {
+        // броня/шлем/маска/рюкзак
+        EquipEquipment(ItemRow);
+    }
+    else
+    {
+        // оружие/девайсы → меняем WeaponState
+        const EWeaponState NewState = GetWeaponStateForCategory(ItemRow.StoreCategory);
+        if (NewState != EWeaponState::Unarmed)
+        {
+            SetWeaponState(NewState);
+        }
+        else
+        {
+            UE_LOG(LogTemp, Warning, TEXT("EquipItem: Category %d does not change weapon state"),
+                static_cast<int32>(ItemRow.StoreCategory));
+        }
+    }
+
+    // Заполняем EquipmentSlots ДЛЯ ВСЕХ типов, чтобы UI видел предмет
+    EEquipmentSlotType Slot = ItemRow.EquipmentSlot;
+
+    // если в DT не задан конкретный слот — берём по категории
+    if (Slot == EEquipmentSlotType::None)
+    {
+        Slot = GetEquipmentSlotForCategory(ItemRow.StoreCategory);
+
+        // Особый случай: HeroParts (голова/туловище/ноги)
+        if (Slot == EEquipmentSlotType::None && bIsHeroPart)
+        {
+            switch (ItemRow.HeroPartType)
+            {
+            case EHeroPartType::Head:
+                Slot = EEquipmentSlotType::EquipmentSlotHead;
+                break;
+            case EHeroPartType::Body:
+                Slot = EEquipmentSlotType::EquipmentSlotBody;
+                break;
+            case EHeroPartType::Legs:
+                Slot = EEquipmentSlotType::EquipmentSlotLegs;
+                break;
+            default:
+                break;
+            }
+        }
+    }
+
+    // ResolveAutoSlot — чтобы, например, Armor ушёл в Armor, Weapon1/2 и т.д.
+    Slot = ResolveAutoSlot(Slot, EquipmentSlots);
+
+    if (Slot != EEquipmentSlotType::None)
+    {
+        EquipmentSlots.FindOrAdd(Slot) = ItemRow;
+
+        // обновляем панель экипировки
+        if (InventoryLayoutWidgetInstance)
+        {
+            InventoryLayoutWidgetInstance->SetEquipment(EquipmentSlots);
+        }
+    }
+
+	static const FName Bone_WeaponR(TEXT("weapon_r"));
+	static const FName Socket_Rifle(TEXT("Rifle_Socket"));
+	static const FName Socket_Pistol(TEXT("Pistol_Socket"));
+
+	if (Slot == EEquipmentSlotType::EquipmentSlotPistol)
 	{
-	case EStoreCategory::storecat_HeroParts:
-		EquipHeroPart(ItemRow);
-		return;
-
-	case EStoreCategory::storecat_Armor:
-	case EStoreCategory::storecat_Helmet:
-	case EStoreCategory::storecat_Mask:
-	case EStoreCategory::storecat_Backpack:
-		EquipEquipment(ItemRow);
-		return;
-
-	default:
-		break;
-	}
-
-	// Всё остальное: оружие / спец-предметы
-	const EWeaponState NewState = GetWeaponStateForCategory(ItemRow.StoreCategory);
-
-	if (NewState != EWeaponState::Unarmed)
-	{
-		SetWeaponState(NewState);
-	}
-	else
-	{
-		UE_LOG(LogTemp, Log, TEXT("EquipItem: Item %s (category %d) does not change WeaponState"),
-			   *ItemRow.InternalName.ToString(),
-			   static_cast<int32>(ItemRow.StoreCategory));
-	}
-
-	// Определяем базовый слот по DataTable или по категории
-	EEquipmentSlotType Slot = ItemRow.EquipmentSlot;
-	if (Slot == EEquipmentSlotType::None)
-	{
-		Slot = GetEquipmentSlotForCategory(ItemRow.StoreCategory);
-	}
-
-	// Автологика Weapon1/Weapon2, Device1/Device2
-	Slot = ResolveAutoSlot(Slot, EquipmentSlots);
-
-	// Если слот валидный — кладём предмет туда
-	if (Slot != EEquipmentSlotType::None)
-	{
-		EquipmentSlots.FindOrAdd(Slot) = ItemRow;
-
-		// Обновляем UI
-		if (InventoryLayoutWidgetInstance)
+		if (Mesh_Pistol)
 		{
-			InventoryLayoutWidgetInstance->SetEquipment(EquipmentSlots);
+			Mesh_Pistol->SetSkeletalMesh(ItemRow.HeroPartMesh);
+			Mesh_Pistol->SetVisibility(ItemRow.HeroPartMesh != nullptr, true);
+
+			const FName AttachName = GetMesh()->DoesSocketExist(Socket_Pistol) ? Socket_Pistol : Bone_WeaponR;
+			Mesh_Pistol->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachName);
+		}
+	}
+	else if (Slot == EEquipmentSlotType::EquipmentSlotWeapon1 || Slot == EEquipmentSlotType::EquipmentSlotWeapon2)
+	{
+		if (Mesh_Rifle)
+		{
+			Mesh_Rifle->SetSkeletalMesh(ItemRow.HeroPartMesh);
+			Mesh_Rifle->SetVisibility(ItemRow.HeroPartMesh != nullptr, true);
+
+			const FName AttachName = GetMesh()->DoesSocketExist(Socket_Rifle) ? Socket_Rifle : Bone_WeaponR;
+			Mesh_Rifle->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachName);
 		}
 	}
 }
@@ -592,20 +711,55 @@ bool AARESMMOCharacter::UnequipSlot(EEquipmentSlotType SlotType)
 		break;
 
 	case EEquipmentSlotType::EquipmentSlotHead:
-		if (Mesh_Head)  Mesh_Head->SetSkeletalMesh(nullptr);
+		if (Mesh_Head)
+		{
+			Mesh_Head->SetSkeletalMesh(DefaultHeadMesh);
+		}
 		break;
+
 	case EEquipmentSlotType::EquipmentSlotBody:
-		if (Mesh_Body)  Mesh_Body->SetSkeletalMesh(nullptr);
+		if (Mesh_Body)
+		{
+			Mesh_Body->SetSkeletalMesh(DefaultBodyMesh);
+		}
 		break;
+
 	case EEquipmentSlotType::EquipmentSlotLegs:
-		if (Mesh_Legs)  Mesh_Legs->SetSkeletalMesh(nullptr);
+		if (Mesh_Legs)
+		{
+			Mesh_Legs->SetSkeletalMesh(DefaultLegsMesh);
+		}
+		break;
+
+	case EEquipmentSlotType::EquipmentSlotPistol:
+		if (Mesh_Pistol)
+		{
+			Mesh_Pistol->SetSkeletalMesh(nullptr);
+			Mesh_Pistol->SetVisibility(false, true);
+		}
+		break;
+
+	case EEquipmentSlotType::EquipmentSlotWeapon1:
+	case EEquipmentSlotType::EquipmentSlotWeapon2:
+		if (Mesh_Rifle)
+		{
+			Mesh_Rifle->SetSkeletalMesh(nullptr);
+			Mesh_Rifle->SetVisibility(false, true);
+		}
 		break;
 
 	default:
 		break;
 	}
 
-	// TODO: пересчитать WeaponState в зависимости от того, что осталось в Weapon1/Weapon2
+	// Вернуть в исходную стойку после снятия Weapon1/Weapon2/Pistol/Knife
+	if (SlotType == EEquipmentSlotType::EquipmentSlotPistol ||
+		SlotType == EEquipmentSlotType::EquipmentSlotWeapon1 ||
+		SlotType == EEquipmentSlotType::EquipmentSlotWeapon2 ||
+		SlotType == EEquipmentSlotType::EquipmentSlotKnife)
+	{
+		RecalculateWeaponStateFromEquipment();
+	}
 
 	// Пытаемся вернуть предмет в инвентарь
 	const bool bAdded = AddItemToInventory(RemovedItem, 1);
@@ -926,6 +1080,41 @@ void AARESMMOCharacter::ToggleInventory()
             PC->SetIgnoreMoveInput(false);
         }
     }
+}
+
+void AARESMMOCharacter::RecalculateWeaponStateFromEquipment()
+{
+	auto TryGetStateFromSlot = [&](EEquipmentSlotType Slot, EWeaponState& OutState) -> bool
+	{
+		if (const FItemBaseRow* Row = EquipmentSlots.Find(Slot))
+		{
+			const EWeaponState S = GetWeaponStateForCategory(Row->StoreCategory);
+			if (S != EWeaponState::Unarmed)
+			{
+				OutState = S;
+				return true;
+			}
+		}
+		return false;
+	};
+
+	EWeaponState NewState = EWeaponState::Unarmed;
+
+	// Приоритет:
+	// Основные стволы
+	if (TryGetStateFromSlot(EEquipmentSlotType::EquipmentSlotWeapon1, NewState) ||
+		TryGetStateFromSlot(EEquipmentSlotType::EquipmentSlotWeapon2, NewState) ||
+		// Для Пистолетов
+		TryGetStateFromSlot(EEquipmentSlotType::EquipmentSlotPistol, NewState) ||
+		// Для Melee
+		TryGetStateFromSlot(EEquipmentSlotType::EquipmentSlotKnife, NewState))
+	{
+		SetWeaponState(NewState);
+		return;
+	}
+
+	// Ничего оружейного не осталось
+	SetWeaponState(EWeaponState::Unarmed);
 }
 
 void AARESMMOCharacter::AddInventoryPreviewYaw(float DeltaYaw)

@@ -71,31 +71,31 @@ struct ARESMMO_API FItemBaseRow : public FTableRowBase
 
 public:
 	/** Уникальный числовой ID предмета */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Item")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Item")
 	int32 ItemID = 0;
 
 	/** Внутреннее имя (для удобства, можно использовать как строковый ID) */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Item")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|tem")
 	FName InternalName;
 
 	/** Локализуемое название предмета */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Item")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Item")
 	FText DisplayName;
 
 	/** Описание предмета */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Item")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Item")
 	FText Description;
 
 	/** Главная категория (storecat_*) */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Item")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Item")
 	EStoreCategory StoreCategory = EStoreCategory::storecat_INVALID;
 
 	/** Подкатегория (по желанию) */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Item")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Item")
 	EStoreSubCategory StoreSubCategory = EStoreSubCategory::None;
 
 	/** Геймплейный класс предмета (для логики инвентаря и применения) */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Item")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Item")
 	EItemClass ItemClass = EItemClass::None;
 
 	/** Эффекты при употреблении (Medicine/Food/Water) */
@@ -103,11 +103,18 @@ public:
 	FConsumableEffects ConsumableEffects;
 
 	/** Максимальный размер стака */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Item")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Item")
 	int32 MaxStackSize = 1;
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Item")
+	bool bUseStackSize = false;
+
+	// Текущее количество в стаке
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Item")
+	int32 StackSize = 1;
+
 	/** Вес одного предмета (для системы веса / переноса) */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Item")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Item")
 	float Weight = 0.0f;
 
 	/** Иконка для инвентаря / магазина */
@@ -128,37 +135,49 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="World")
 	TSoftClassPtr<AActor> WorldActorClass;
 
+	/** Можно ли продавать обратно в магазин */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Economy")
+	bool bCanSell = true;
+
 	/** Цена в мягкой валюте (GD, например) */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Economy")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Economy")
 	int32 PriceGD = 0;
 
 	/** Цена в донатной валюте (GC, например) */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Economy")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Economy")
 	int32 PriceGC = 0;
 
-	/** Можно ли продавать обратно в магазин */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Economy")
-	bool bCanSell = true;
+	/** Можно ли ремонтировать предметы */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Durability")
+	bool bUseRepair = false;
 
 	/** Максимальная прочность */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Durability")
 	int32 MaxDurability = 0;
 
-	/** Текущая прочность при создании */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config")
+	/** Стандартная прочность */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Durability")
 	int32 DefaultDurability = 0;
 
+	/** Текущая прочность */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Durability")
+	int32 CurrDurability = 0;
+
 	/** Использует ли предмет заряд */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Charge")
 	bool bUseCharge = false;
 
 	/** Максимальный заряд */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Charge")
 	int32 MaxCharge = 0;
 
-	/** Заряд по умолчанию */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config")
+	/** Стандартный заряд */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Charge")
 	int32 DefaultCharge = 0;
+
+	/** Текущий заряд */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Charge")
+	int32 CurrCharge = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	EHeroPartType HeroPartType = EHeroPartType::None;

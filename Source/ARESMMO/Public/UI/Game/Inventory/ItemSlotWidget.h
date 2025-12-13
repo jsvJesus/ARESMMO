@@ -44,6 +44,9 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional))
 	UTextBlock* ChargeText;
 
+	UPROPERTY(meta = (BindWidgetOptional))
+	UTextBlock* StackText;
+
 protected:
 	virtual void NativeConstruct() override;
 

@@ -34,6 +34,15 @@ public:
 	UPROPERTY(meta=(BindWidgetOptional))
 	UImage* ItemIcon;
 
+	UPROPERTY(meta=(BindWidgetOptional))
+	UTextBlock* NameText;
+
+	UPROPERTY(meta=(BindWidgetOptional))
+	UTextBlock* ConditionText;
+
+	UPROPERTY(meta=(BindWidgetOptional))
+	UTextBlock* ChargeText;
+
 	// Текущий предмет в этом слоте (копия строки из DataTable)
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|Equipment")
 	FItemBaseRow CurrentItemRow;

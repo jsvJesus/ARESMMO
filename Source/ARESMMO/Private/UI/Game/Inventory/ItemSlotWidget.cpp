@@ -83,39 +83,33 @@ void UItemSlotWidget::InitItem(const FItemBaseRow& ItemRow, const FItemSize& Gri
 		NameText->SetText(ItemRow.DisplayName);
 	}
 
-	// ---------- ВЕС ПРЕДМЕТА (с учётом MaxStackSize там, где надо) ----------
+	// ---------- СТЕК ----------
+	if (StackText)
+	{
+		if (ItemRow.bUseStackSize && ItemRow.MaxStackSize > 1)
+		{
+			const int32 Count = FMath::Clamp(ItemRow.StackSize, 1, ItemRow.MaxStackSize);
+			StackText->SetText(FText::FromString(FString::Printf(TEXT("x%d"), Count)));
+			StackText->SetVisibility(Count > 1 ? ESlateVisibility::Visible : ESlateVisibility::Hidden);
+		}
+		else
+		{
+			StackText->SetText(FText::GetEmpty());
+			StackText->SetVisibility(ESlateVisibility::Hidden);
+		}
+	}
+
+	// ---------- ВЕС ПРЕДМЕТА (с учётом ТЕКУЩЕГО StackSize) ----------
 	if (WeightText)
 	{
-		float EffectiveWeight = ItemRow.Weight;
+		const int32 Count = (ItemRow.bUseStackSize ? FMath::Max(1, ItemRow.StackSize) : 1);
+		const float EffectiveWeight = ItemRow.Weight * static_cast<float>(Count);
 
-		// Категории, где используем MaxStackSize
-		switch (ItemRow.StoreCategory)
-		{
-		case EStoreCategory::storecat_Backpack:
-		case EStoreCategory::storecat_Grenade:
-		case EStoreCategory::storecat_Medicine:
-		case EStoreCategory::storecat_Food:
-		case EStoreCategory::storecat_Water:
-		case EStoreCategory::storecat_Components:
-		case EStoreCategory::storecat_CraftRecipes:
-		case EStoreCategory::storecat_CraftItems:
-		case EStoreCategory::storecat_Ammo:
-		case EStoreCategory::storecat_WeaponATTM:
-		case EStoreCategory::storecat_GearATTM:
-			EffectiveWeight = ItemRow.Weight * FMath::Max(1, ItemRow.MaxStackSize);
-			break;
-
-		default:
-			// для всего остального – вес одного предмета
-			break;
-		}
-
-		const FString WeightStr = FString::Printf(TEXT("%.1f"), EffectiveWeight);
-		WeightText->SetText(FText::FromString(WeightStr));
+		WeightText->SetText(FText::FromString(FString::Printf(TEXT("%.1f"), EffectiveWeight)));
 	}
 
 	// ---------- ПРОЧНОСТЬ ПРЕДМЕТА (Durability %) ----------
-	const bool bUsesDurability =
+	/*const bool bUsesDurability =
 		(ItemRow.StoreCategory == EStoreCategory::storecat_Armor  ||
 		 ItemRow.StoreCategory == EStoreCategory::storecat_Helmet ||
 		 ItemRow.StoreCategory == EStoreCategory::storecat_Mask   ||
@@ -128,28 +122,30 @@ void UItemSlotWidget::InitItem(const FItemBaseRow& ItemRow, const FItemSize& Gri
 		 ItemRow.StoreCategory == EStoreCategory::storecat_MELEE  ||
 		 ItemRow.StoreCategory == EStoreCategory::storecat_CraftItems ||
 		 ItemRow.StoreCategory == EStoreCategory::storecat_PlaceItem);
+	*/
 
 	if (ConditionText)
 	{
-		if (bUsesDurability && ItemRow.MaxDurability > 0)
+		const bool bUsesDurability = (ItemRow.bUseRepair && ItemRow.MaxDurability > 0);
+
+		if (bUsesDurability)
 		{
-			const int32 Current = ItemRow.DefaultDurability;
-			const int32 Max     = ItemRow.MaxDurability;
+			const int32 Max = ItemRow.MaxDurability;
+			int32 Current = ItemRow.CurrDurability;
 
-			const float Pct    = static_cast<float>(Current) / static_cast<float>(Max);
-			const int32 PctInt = FMath::RoundToInt(Pct * 100.f);
+			// Если ты где-то ещё не инициализируешь CurrDurability — можно фолбекнуть на Default
+			if (Current <= 0 && ItemRow.DefaultDurability > 0)
+			{
+				Current = ItemRow.DefaultDurability;
+			}
 
-			ConditionText->SetText(FText::FromString(
-				FString::Printf(TEXT("%d%%"), PctInt)));
+			Current = FMath::Clamp(Current, 0, Max);
 
-			// Цвет через библиотеку (порогa из ItemConditionLibrary)
-			const EItemConditionState State =
-				UItemConditionLibrary::GetConditionStateFromValues(Current, Max);
+			const int32 PctInt = FMath::RoundToInt((static_cast<float>(Current) / static_cast<float>(Max)) * 100.f);
+			ConditionText->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), PctInt)));
 
-			const FLinearColor Color =
-				UItemConditionLibrary::GetConditionColor(State);
-
-			ConditionText->SetColorAndOpacity(Color);
+			const EItemConditionState State = UItemConditionLibrary::GetConditionStateFromValues(Current, Max);
+			ConditionText->SetColorAndOpacity(UItemConditionLibrary::GetConditionColor(State));
 		}
 		else
 		{
@@ -158,34 +154,36 @@ void UItemSlotWidget::InitItem(const FItemBaseRow& ItemRow, const FItemSize& Gri
 	}
 
 	// ---------- ЗАРЯД ПРЕДМЕТА (Charge %) по подкатегориям ----------
-	const bool bUsesCharge =
+	/*const bool bUsesCharge =
 		(ItemRow.StoreSubCategory == EStoreSubCategory::Usable_PDA          ||
 		 ItemRow.StoreSubCategory == EStoreSubCategory::Usable_Detector    ||
 		 ItemRow.StoreSubCategory == EStoreSubCategory::WeaponATTM_Laser   ||
 		 ItemRow.StoreSubCategory == EStoreSubCategory::WeaponATTM_Flashlight ||
 		 ItemRow.StoreSubCategory == EStoreSubCategory::GearATTM_NVG       ||
 		 ItemRow.StoreSubCategory == EStoreSubCategory::GearATTM_Headlamp);
+	*/
 
 	if (ChargeText)
 	{
-		if (bUsesCharge && ItemRow.MaxCharge > 0)
+		const bool bUsesCharge = (ItemRow.bUseCharge && ItemRow.MaxCharge > 0);
+
+		if (bUsesCharge)
 		{
-			const int32 Current = ItemRow.DefaultCharge;
-			const int32 Max     = ItemRow.MaxCharge;
+			const int32 Max = ItemRow.MaxCharge;
+			int32 Current = ItemRow.CurrCharge;
 
-			const float Pct    = static_cast<float>(Current) / static_cast<float>(Max);
-			const int32 PctInt = FMath::RoundToInt(Pct * 100.f);
+			if (Current <= 0 && ItemRow.DefaultCharge > 0)
+			{
+				Current = ItemRow.DefaultCharge;
+			}
 
-			ChargeText->SetText(FText::FromString(
-				FString::Printf(TEXT("%d%%"), PctInt)));
+			Current = FMath::Clamp(Current, 0, Max);
 
-			const EItemConditionState State =
-				UItemConditionLibrary::GetConditionStateFromValues(Current, Max);
+			const int32 PctInt = FMath::RoundToInt((static_cast<float>(Current) / static_cast<float>(Max)) * 100.f);
+			ChargeText->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), PctInt)));
 
-			const FLinearColor Color =
-				UItemConditionLibrary::GetConditionColor(State);
-
-			ChargeText->SetColorAndOpacity(Color);
+			const EItemConditionState State = UItemConditionLibrary::GetConditionStateFromValues(Current, Max);
+			ChargeText->SetColorAndOpacity(UItemConditionLibrary::GetConditionColor(State));
 		}
 		else
 		{

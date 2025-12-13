@@ -118,6 +118,9 @@ protected:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="ARES|Camera")
 	float TurnRate = 1.0f;
 
+	UFUNCTION(BlueprintCallable, Category="ARES|Anim")
+	void RecalculateWeaponStateFromEquipment();
+
 public:
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 	FORCEINLINE class UCameraComponent* GetTPSCamera() const { return TPSCamera; }
@@ -163,6 +166,16 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|HeroParts")
 	USkeletalMeshComponent* Mesh_Legs;
 
+	// Дефолтные меши для восстановления при снятии вещей
+    UPROPERTY()
+    USkeletalMesh* DefaultHeadMesh = nullptr;
+    
+    UPROPERTY()
+    USkeletalMesh* DefaultBodyMesh = nullptr;
+    
+    UPROPERTY()
+    USkeletalMesh* DefaultLegsMesh = nullptr;
+
 	// ===== Equipment Visual Meshes =====
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|EquipmentMesh")
 	USkeletalMeshComponent* Mesh_Armor;
@@ -175,6 +188,13 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|EquipmentMesh")
 	USkeletalMeshComponent* Mesh_Backpack;
+
+	// ===== Weapon Visual Meshes =====
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|WeaponMesh")
+	USkeletalMeshComponent* Mesh_Rifle = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|WeaponMesh")
+	USkeletalMeshComponent* Mesh_Pistol = nullptr;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|Equipment")
 	TMap<EEquipmentSlotType, FItemBaseRow> EquipmentSlots;
