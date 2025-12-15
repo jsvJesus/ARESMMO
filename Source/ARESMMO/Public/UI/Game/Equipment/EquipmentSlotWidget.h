@@ -6,6 +6,7 @@
 #include "Items/ItemTypes.h"     // EEquipmentSlotType
 #include "EquipmentSlotWidget.generated.h"
 
+class UItemSlotWidget;
 class ARESMMOCharacter;
 class UTextBlock;
 class UImage;
@@ -56,6 +57,10 @@ public:
 	// Размер одной клетки в пикселях (как в обычном инвентаре)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="ARES|Equipment")
 	float CellSizePx = 64.0f;
+
+	/** Виджет, который используется в качестве Drag&Drop визуала */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|Equipment")
+	TSubclassOf<UItemSlotWidget> DragVisualItemClass;
 
 	// Сигнал "по этому слоту даблкликнули"
 	UPROPERTY(BlueprintAssignable, Category="ARES|Equipment")
