@@ -1,6 +1,8 @@
 #include "UI/Game/Equipment/EquipmentSlotWidget.h"
 #include "UI/Game/Inventory/ItemDragDropOperation.h"
 #include "UI/Game/Equipment/EquipmentWidget.h"
+#include "UI/Game/Inventory/InventoryWidget.h"
+#include "UI/Game/Inventory/ItemSlotWidget.h"
 #include "Components/Image.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
@@ -53,45 +55,22 @@ void UEquipmentSlotWidget::NativeOnDragDetected(
     DragOp->bFromEquipment = true;
     DragOp->SourceEquipmentSlot = SlotType;
     DragOp->Pivot = EDragPivot::MouseDown;
+
+	TSubclassOf<UItemSlotWidget> VisualClass = DragVisualItemClass;
+	if (!VisualClass)
+	{
+		VisualClass = UItemSlotWidget::StaticClass();
+	}
+	UItemSlotWidget* DragVisual = CreateWidget<UItemSlotWidget>(GetOwningPlayer(), VisualClass);
 	
-    UEquipmentSlotWidget* DragVisual = CreateWidget<UEquipmentSlotWidget>(GetOwningPlayer(), GetClass());
     if (DragVisual)
     {
-        DragVisual->bHasItem = true;
-        DragVisual->CurrentItemRow = CurrentItemRow;
-    	
-        if (DragVisual->SlotSizeBox)
-        {
-            const float W = static_cast<float>(CurrentItemRow.GridSize.Width)  * CellSizePx;
-            const float H = static_cast<float>(CurrentItemRow.GridSize.Height) * CellSizePx;
-            DragVisual->SlotSizeBox->SetWidthOverride(W);
-            DragVisual->SlotSizeBox->SetHeightOverride(H);
-        }
-    	
-        if (DragVisual->ItemIcon && ItemIcon)
-        {
-            DragVisual->ItemIcon->SetBrush(ItemIcon->GetBrush());
-            DragVisual->ItemIcon->SetVisibility(ESlateVisibility::HitTestInvisible);
-        }
-    	
-        if (DragVisual->NameText)
-        {
-            DragVisual->NameText->SetText(CurrentItemRow.DisplayName);
-            DragVisual->NameText->SetVisibility(ESlateVisibility::HitTestInvisible);
-        }
-    	
-        if (DragVisual->ConditionText)
-        {
-            DragVisual->ConditionText->SetText(FText::GetEmpty());
-            DragVisual->ConditionText->SetVisibility(ESlateVisibility::Collapsed);
-        }
+        FInventoryItemEntry DragEntry;
+        DragEntry.ItemRow     = CurrentItemRow;
+        DragEntry.SizeInCells = CurrentItemRow.GridSize;
 
-        if (DragVisual->ChargeText)
-        {
-            DragVisual->ChargeText->SetText(FText::GetEmpty());
-            DragVisual->ChargeText->SetVisibility(ESlateVisibility::Collapsed);
-        }
-
+        DragVisual->InitItem(DragEntry);
+        DragVisual->SetFromEquipmentSlot(SlotType);
         DragVisual->SetIsEnabled(false);
 
         DragOp->DefaultDragVisual = DragVisual;

@@ -48,38 +48,43 @@ void UItemSlotWidget::NativeOnDragDetected(
         return;
     }
 	
-    DragOp->ItemRow       = CurrentItemRow;
-    DragOp->SourceCellX   = CurrentCellX;
-    DragOp->SourceCellY   = CurrentCellY;
-    DragOp->bFromEquipment = bFromEquipment;
-    DragOp->SourceEquipmentSlot = SourceEquipmentSlot;
-    DragOp->Pivot = EDragPivot::MouseDown;
-	
-    UItemSlotWidget* DragVisual = CreateWidget<UItemSlotWidget>(GetOwningPlayer(), GetClass());
-    if (DragVisual)
-    {
-        if (DragVisual->BackgroundImage && BackgroundImage)
-        {
-            DragVisual->BackgroundImage->SetBrush(BackgroundImage->GetBrush());
-            DragVisual->BackgroundImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-        }
-    	
-        if (DragVisual->IconImage && IconImage)
-        {
-            DragVisual->IconImage->SetBrush(IconImage->GetBrush());
-            DragVisual->IconImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-        }
-    	
-        if (DragVisual->NameText)
-        {
-            DragVisual->NameText->SetText(CurrentItemRow.DisplayName);
-            DragVisual->NameText->SetVisibility(ESlateVisibility::HitTestInvisible);
-        }
-    	
-        if (DragVisual->StackText)     DragVisual->StackText->SetVisibility(ESlateVisibility::Collapsed);
-        if (DragVisual->WeightText)    DragVisual->WeightText->SetVisibility(ESlateVisibility::Collapsed);
-        if (DragVisual->ConditionText) DragVisual->ConditionText->SetVisibility(ESlateVisibility::Collapsed);
-        if (DragVisual->ChargeText)    DragVisual->ChargeText->SetVisibility(ESlateVisibility::Collapsed);
+	DragOp->ItemRow       = CurrentItemRow;
+	DragOp->ItemSize      = CurrentItemSize;
+	DragOp->SourceCellX   = CurrentCellX;
+	DragOp->SourceCellY   = CurrentCellY;
+	DragOp->bFromEquipment = bFromEquipment;
+	DragOp->SourceEquipmentSlot = SourceEquipmentSlot;
+	DragOp->Pivot = EDragPivot::MouseDown;
+
+	UItemSlotWidget* DragVisual = CreateWidget<UItemSlotWidget>(GetOwningPlayer(), GetClass());
+	if (DragVisual)
+	{
+		FInventoryItemEntry DragEntry;
+		DragEntry.ItemRow     = CurrentItemRow;
+		DragEntry.SizeInCells = CurrentItemSize;
+		DragVisual->InitItem(DragEntry);
+
+		DragVisual->SetFromEquipmentSlot(SourceEquipmentSlot);
+
+		if (DragVisual->BackgroundImage)
+		{
+			DragVisual->BackgroundImage->SetVisibility(ESlateVisibility::HitTestInvisible);
+		}
+
+		if (DragVisual->IconImage)
+		{
+			DragVisual->IconImage->SetVisibility(ESlateVisibility::HitTestInvisible);
+		}
+
+		if (DragVisual->NameText)
+		{
+			DragVisual->NameText->SetVisibility(ESlateVisibility::HitTestInvisible);
+		}
+
+		if (DragVisual->StackText)     DragVisual->StackText->SetVisibility(ESlateVisibility::Collapsed);
+		if (DragVisual->WeightText)    DragVisual->WeightText->SetVisibility(ESlateVisibility::Collapsed);
+		if (DragVisual->ConditionText) DragVisual->ConditionText->SetVisibility(ESlateVisibility::Collapsed);
+		if (DragVisual->ChargeText)    DragVisual->ChargeText->SetVisibility(ESlateVisibility::Collapsed);
     	
         DragVisual->SetDesiredSizeInViewport(
             FVector2D(CurrentItemSize.Width * 64.f, CurrentItemSize.Height * 64.f)
