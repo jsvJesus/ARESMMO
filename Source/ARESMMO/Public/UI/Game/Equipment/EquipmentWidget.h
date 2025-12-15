@@ -9,6 +9,7 @@
 class UEquipmentSlotWidget;
 class UInventoryLayoutWidget;
 class AARESMMOCharacter;
+class UItemSlotWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnEquipmentSlotUnequipRequested, EEquipmentSlotType, SlotType);
 
@@ -61,6 +62,10 @@ public:
 	// Полностью обновить отображение из мапы персонажа
 	UFUNCTION(BlueprintCallable, Category="ARES|Equipment")
 	void SetEquipment(const TMap<EEquipmentSlotType, FItemBaseRow>& InEquipment);
+
+	// Drag&Drop
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|Equipment")
+	TSubclassOf<UItemSlotWidget> DefaultDragVisualItemClass;
 
 	// Очистить все слоты (для начала или при Reset)
 	UFUNCTION(BlueprintCallable, Category="ARES|Equipment")

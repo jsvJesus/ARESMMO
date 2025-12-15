@@ -1,13 +1,13 @@
 #include "UI/Game/Inventory/ItemSlotWidget.h"
 #include "UI/Game/Inventory/ItemDragDropOperation.h"
 #include "UI/Game/Inventory/InventoryWidget.h"
-#include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Components/Image.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
 #include "Components/PanelWidget.h"
 #include "Items/ItemConditionLibrary.h"
 #include "Engine/Texture2D.h"
+#include "InputCoreTypes.h"
 
 void UItemSlotWidget::NativeConstruct()
 {
@@ -23,82 +23,6 @@ FReply UItemSlotWidget::NativeOnMouseButtonDoubleClick(const FGeometry& InGeomet
 	}
 
 	return Super::NativeOnMouseButtonDoubleClick(InGeometry, InMouseEvent);
-}
-
-FReply UItemSlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
-{
-	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
-	{
-		return UWidgetBlueprintLibrary::DetectDragIfPressed(InMouseEvent, this, EKeys::LeftMouseButton).NativeReply;
-	}
-
-	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
-}
-
-void UItemSlotWidget::NativeOnDragDetected(
-    const FGeometry& InGeometry,
-    const FPointerEvent& InMouseEvent,
-    UDragDropOperation*& OutOperation)
-{
-    UItemDragDropOperation* DragOp = Cast<UItemDragDropOperation>(
-        UWidgetBlueprintLibrary::CreateDragDropOperation(UItemDragDropOperation::StaticClass()));
-
-    if (!DragOp)
-    {
-        return;
-    }
-	
-	DragOp->ItemRow       = CurrentItemRow;
-	DragOp->ItemSize      = CurrentItemSize;
-	DragOp->SourceCellX   = CurrentCellX;
-	DragOp->SourceCellY   = CurrentCellY;
-	DragOp->bFromEquipment = bFromEquipment;
-	DragOp->SourceEquipmentSlot = SourceEquipmentSlot;
-	DragOp->Pivot = EDragPivot::MouseDown;
-
-	UItemSlotWidget* DragVisual = CreateWidget<UItemSlotWidget>(GetOwningPlayer(), GetClass());
-	if (DragVisual)
-	{
-		FInventoryItemEntry DragEntry;
-		DragEntry.ItemRow     = CurrentItemRow;
-		DragEntry.SizeInCells = CurrentItemSize;
-		DragVisual->InitItem(DragEntry);
-
-		DragVisual->SetFromEquipmentSlot(SourceEquipmentSlot);
-
-		if (DragVisual->BackgroundImage)
-		{
-			DragVisual->BackgroundImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-		}
-
-		if (DragVisual->IconImage)
-		{
-			DragVisual->IconImage->SetVisibility(ESlateVisibility::HitTestInvisible);
-		}
-
-		if (DragVisual->NameText)
-		{
-			DragVisual->NameText->SetVisibility(ESlateVisibility::HitTestInvisible);
-		}
-
-		if (DragVisual->StackText)     DragVisual->StackText->SetVisibility(ESlateVisibility::Collapsed);
-		if (DragVisual->WeightText)    DragVisual->WeightText->SetVisibility(ESlateVisibility::Collapsed);
-		if (DragVisual->ConditionText) DragVisual->ConditionText->SetVisibility(ESlateVisibility::Collapsed);
-		if (DragVisual->ChargeText)    DragVisual->ChargeText->SetVisibility(ESlateVisibility::Collapsed);
-    	
-        DragVisual->SetDesiredSizeInViewport(
-            FVector2D(CurrentItemSize.Width * 64.f, CurrentItemSize.Height * 64.f)
-        );
-
-        DragVisual->SetIsEnabled(false);
-        DragOp->DefaultDragVisual = DragVisual;
-    }
-    else
-    {
-        DragOp->DefaultDragVisual = this;
-    }
-
-    OutOperation = DragOp;
 }
 
 // одна клетка = 64 px

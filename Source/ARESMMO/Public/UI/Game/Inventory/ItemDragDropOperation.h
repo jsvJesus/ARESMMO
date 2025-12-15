@@ -6,6 +6,8 @@
 #include "Items/ItemTypes.h"
 #include "ItemDragDropOperation.generated.h"
 
+class UImage;
+class UTextBlock;
 /** Данные для Drag&Drop предметов в инвентаре/экипировке */
 UCLASS()
 class ARESMMO_API UItemDragDropOperation : public UDragDropOperation

@@ -58,21 +58,21 @@ protected:
 		const FGeometry& InGeometry,
 		const FPointerEvent& InMouseEvent) override;
 
-	virtual FReply NativeOnMouseButtonDown(
-				const FGeometry& InGeometry,
-				const FPointerEvent& InMouseEvent) override;
-
-	virtual void NativeOnDragDetected(
-			const FGeometry& InGeometry,
-			const FPointerEvent& InMouseEvent,
-			UDragDropOperation*& OutOperation) override;
-
 	// Храним текущий предмет
 	UPROPERTY()
 	FItemBaseRow CurrentItemRow;
 
 	UPROPERTY()
 	FItemSize CurrentItemSize;
+
+	UPROPERTY()
+	UTextBlock* CurrentNameText;
+	
+	UPROPERTY()
+	UImage* CurrentBackgroundImage;
+	
+	UPROPERTY()
+	UImage* CurrentIconImage;
 
 	int32 CurrentCellX = 0;
 	int32 CurrentCellY = 0;

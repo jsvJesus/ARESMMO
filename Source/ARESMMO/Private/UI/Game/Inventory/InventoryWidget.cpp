@@ -1,6 +1,7 @@
 #include "UI/Game/Inventory/InventoryWidget.h"
 #include "UI/Game/Inventory/ItemSlotWidget.h"
 #include "UI/Game/Inventory/ItemDragDropOperation.h"
+#include "UI/Game/Inventory/ItemDragWidget.h"
 #include "UI/Game/Inventory/InventoryLayoutWidget.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
@@ -181,7 +182,7 @@ void UInventoryWidget::BuildEmptySlots(const TArray<FInventoryItemEntry>& Source
 				continue;
 			}
 
-			UUserWidget* SlotWidget = CreateWidget<UUserWidget>(GetWorld(), EmptySlotWidgetClass);
+			UUserWidget* SlotWidget = CreateWidget<UUserWidget>(GetOwningPlayer(), EmptySlotWidgetClass);
 			if (!SlotWidget)
 			{
 				continue;
@@ -231,7 +232,14 @@ void UInventoryWidget::CreateItemWidget(const FInventoryItemEntry& Entry)
 	}
 
 	// создаём КОНКРЕТНО UItemSlotWidget
-	UItemSlotWidget* ItemWidget = CreateWidget<UItemSlotWidget>(GetWorld(), ItemWidgetClass);
+	/*UItemSlotWidget* ItemWidget = CreateWidget<UItemSlotWidget>(GetWorld(), ItemWidgetClass);
+	if (!ItemWidget)
+	{
+		//UE_LOG(LogTemp, Warning, TEXT("CreateItemWidget: failed to create ItemSlotWidget"));
+		//return;
+	}*/
+
+	UItemDragWidget* ItemWidget = CreateWidget<UItemDragWidget>(GetOwningPlayer(), ItemWidgetClass);
 	if (!ItemWidget)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("CreateItemWidget: failed to create ItemSlotWidget"));

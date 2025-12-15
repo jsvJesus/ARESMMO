@@ -10,6 +10,7 @@ class UInventoryLayoutWidget;
 class UItemSlotWidget;
 class UCanvasPanel;
 class UUserWidget;
+class UItemDragWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnInventoryItemEquipRequested, const FItemBaseRow&, ItemRow);
 
@@ -45,9 +46,13 @@ public:
 	UPROPERTY(meta=(BindWidget))
 	UCanvasPanel* InventoryCanvas;
 
-	/** Виджет одного предмета (UMG — только картинка) */
+	// DragDrop
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|Inventory")
-	TSubclassOf<UItemSlotWidget> ItemWidgetClass;
+	TSubclassOf<UItemDragWidget> ItemWidgetClass;
+
+	/** Виджет одного предмета (UMG — только картинка) */
+	//UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|Inventory")
+	//TSubclassOf<UItemSlotWidget> ItemWidgetClass;
 
 	/** Виджет пустого слота 64x64 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|Inventory")
