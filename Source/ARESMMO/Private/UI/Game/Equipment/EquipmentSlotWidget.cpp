@@ -1,9 +1,14 @@
 #include "UI/Game/Equipment/EquipmentSlotWidget.h"
+#include "UI/Game/Inventory/ItemDragDropOperation.h"
+#include "UI/Game/Equipment/EquipmentWidget.h"
 #include "Components/Image.h"
 #include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
+#include "Components/PanelWidget.h"
 #include "Engine/Texture2D.h"
 #include "Items/ItemConditionLibrary.h"
+#include "Blueprint/WidgetBlueprintLibrary.h"
+#include "ARESMMO/ARESMMOCharacter.h"
 
 void UEquipmentSlotWidget::NativeConstruct()
 {
@@ -11,6 +16,116 @@ void UEquipmentSlotWidget::NativeConstruct()
 
 	// При старте слот пустой
 	ClearItem();
+}
+
+FReply UEquipmentSlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+        if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && bHasItem)
+        {
+                return UWidgetBlueprintLibrary::DetectDragIfPressed(InMouseEvent, this, EKeys::LeftMouseButton).NativeReply;
+        }
+
+        return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+void UEquipmentSlotWidget::NativeOnDragDetected(
+    const FGeometry& InGeometry,
+    const FPointerEvent& InMouseEvent,
+    UDragDropOperation*& OutOperation)
+{
+    Super::NativeOnDragDetected(InGeometry, InMouseEvent, OutOperation);
+
+    if (!bHasItem)
+    {
+        return;
+    }
+
+    UItemDragDropOperation* DragOp = Cast<UItemDragDropOperation>(
+        UWidgetBlueprintLibrary::CreateDragDropOperation(UItemDragDropOperation::StaticClass()));
+
+    if (!DragOp)
+    {
+        return;
+    }
+
+    DragOp->ItemRow = CurrentItemRow;
+    DragOp->ItemSize = CurrentItemRow.GridSize;
+    DragOp->bFromEquipment = true;
+    DragOp->SourceEquipmentSlot = SlotType;
+    DragOp->Pivot = EDragPivot::MouseDown;
+	
+    UEquipmentSlotWidget* DragVisual = CreateWidget<UEquipmentSlotWidget>(GetOwningPlayer(), GetClass());
+    if (DragVisual)
+    {
+        DragVisual->bHasItem = true;
+        DragVisual->CurrentItemRow = CurrentItemRow;
+    	
+        if (DragVisual->SlotSizeBox)
+        {
+            const float W = static_cast<float>(CurrentItemRow.GridSize.Width)  * CellSizePx;
+            const float H = static_cast<float>(CurrentItemRow.GridSize.Height) * CellSizePx;
+            DragVisual->SlotSizeBox->SetWidthOverride(W);
+            DragVisual->SlotSizeBox->SetHeightOverride(H);
+        }
+    	
+        if (DragVisual->ItemIcon && ItemIcon)
+        {
+            DragVisual->ItemIcon->SetBrush(ItemIcon->GetBrush());
+            DragVisual->ItemIcon->SetVisibility(ESlateVisibility::HitTestInvisible);
+        }
+    	
+        if (DragVisual->NameText)
+        {
+            DragVisual->NameText->SetText(CurrentItemRow.DisplayName);
+            DragVisual->NameText->SetVisibility(ESlateVisibility::HitTestInvisible);
+        }
+    	
+        if (DragVisual->ConditionText)
+        {
+            DragVisual->ConditionText->SetText(FText::GetEmpty());
+            DragVisual->ConditionText->SetVisibility(ESlateVisibility::Collapsed);
+        }
+
+        if (DragVisual->ChargeText)
+        {
+            DragVisual->ChargeText->SetText(FText::GetEmpty());
+            DragVisual->ChargeText->SetVisibility(ESlateVisibility::Collapsed);
+        }
+
+        DragVisual->SetIsEnabled(false);
+
+        DragOp->DefaultDragVisual = DragVisual;
+    }
+    else
+    {
+        DragOp->DefaultDragVisual = this;
+    }
+
+    OutOperation = DragOp;
+}
+
+bool UEquipmentSlotWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent,
+        UDragDropOperation* InOperation)
+{
+        const UItemDragDropOperation* DragOp = Cast<UItemDragDropOperation>(InOperation);
+
+        if (!DragOp || !OwnerEquipment.IsValid())
+        {
+                return Super::NativeOnDrop(InGeometry, InDragDropEvent, InOperation);
+        }
+
+        AARESMMOCharacter* Character = OwnerEquipment->GetPreviewCharacter();
+        if (!Character)
+        {
+                return Super::NativeOnDrop(InGeometry, InDragDropEvent, InOperation);
+        }
+
+        if (!DragOp->bFromEquipment)
+        {
+                return Character->EquipItemFromInventory(DragOp->ItemRow);
+        }
+
+        return Super::NativeOnDrop(InGeometry, InDragDropEvent, InOperation);
 }
 
 void UEquipmentSlotWidget::ClearItem()
@@ -129,6 +244,11 @@ void UEquipmentSlotWidget::SetItem(const FItemBaseRow& ItemRow)
 			ChargeText->SetText(FText::GetEmpty());
 		}
 	}
+}
+
+void UEquipmentSlotWidget::SetOwnerEquipment(UEquipmentWidget* InOwner)
+{
+	OwnerEquipment = InOwner;
 }
 
 FReply UEquipmentSlotWidget::NativeOnMouseButtonDoubleClick(

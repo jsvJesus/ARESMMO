@@ -119,6 +119,10 @@ enum class EStoreSubCategory : uint8
 	// ===== storecat_UsableItem =====
 	Usable_PDA         UMETA(DisplayName="PDA"),
 	Usable_Detector    UMETA(DisplayName="Detector"),
+	Usable_RapairKit     UMETA(DisplayName="Rapair Kit"),
+
+	// ===== storecat_Components =====
+	Item_Battery	   UMETA(DisplayName="Battery"),
 
 	// ===== storecat_Ammo =====
 	Ammo_223              UMETA(DisplayName=".223"),

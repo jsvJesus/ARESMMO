@@ -6,9 +6,12 @@
 #include "Items/ItemTypes.h"     // EEquipmentSlotType
 #include "EquipmentSlotWidget.generated.h"
 
+class ARESMMOCharacter;
 class UTextBlock;
 class UImage;
 class USizeBox;
+class UItemDragDropOperation;
+class UEquipmentWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnEquipmentSlotDoubleClicked, UEquipmentSlotWidget*, SlotWidget);
 
@@ -58,9 +61,19 @@ public:
 	UPROPERTY(BlueprintAssignable, Category="ARES|Equipment")
 	FOnEquipmentSlotDoubleClicked OnSlotDoubleClicked;
 
+	void SetOwnerEquipment(UEquipmentWidget* InOwner);
+
 protected:
 	// Реакция на двойной клик мышью
 	virtual FReply NativeOnMouseButtonDoubleClick(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+
+	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+
+	virtual void NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent,
+			UDragDropOperation*& OutOperation) override;
+
+	virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent,
+			UDragDropOperation* InOperation) override;
 	
 public:
 	virtual void NativeConstruct() override;
@@ -75,4 +88,7 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="ARES|Equipment")
 	bool IsEmpty() const { return !bHasItem; }
+
+private:
+	TWeakObjectPtr<UEquipmentWidget> OwnerEquipment;
 };

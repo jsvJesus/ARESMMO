@@ -1,14 +1,67 @@
 #include "UI/Game/Inventory/InventoryWidget.h"
+#include "UI/Game/Inventory/ItemSlotWidget.h"
+#include "UI/Game/Inventory/ItemDragDropOperation.h"
+#include "UI/Game/Inventory/InventoryLayoutWidget.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
 #include "Blueprint/UserWidget.h"
-#include "UI/Game/Inventory/ItemSlotWidget.h"
+#include "ARESMMO/ARESMMOCharacter.h"
+
+void UInventoryWidget::SetOwningLayout(UInventoryLayoutWidget* Layout)
+{
+	OwningLayout = Layout;
+}
 
 void UInventoryWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 
 	RebuildInventory();
+}
+
+bool UInventoryWidget::NativeOnDragOver(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent,
+		UDragDropOperation* InOperation)
+{
+	// Разрешаем Drop, если прилетел наш DragOp
+	return InOperation && InOperation->IsA(UItemDragDropOperation::StaticClass());
+}
+
+bool UInventoryWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent,
+		UDragDropOperation* InOperation)
+{
+	const UItemDragDropOperation* DragOp = Cast<UItemDragDropOperation>(InOperation);
+	if (!DragOp || !OwningLayout.IsValid())
+	{
+		return Super::NativeOnDrop(InGeometry, InDragDropEvent, InOperation);
+	}
+
+	AARESMMOCharacter* Character = OwningLayout->GetPreviewCharacter();
+	if (!Character)
+	{
+		return Super::NativeOnDrop(InGeometry, InDragDropEvent, InOperation);
+	}
+
+	const FVector2D LocalPos = InGeometry.AbsoluteToLocal(InDragDropEvent.GetScreenSpacePosition());
+	const int32 DropCellX = FMath::FloorToInt(LocalPos.X / CellSize);
+	const int32 DropCellY = FMath::FloorToInt(LocalPos.Y / CellSize);
+
+	bool bResult = false;
+
+	if (DragOp->bFromEquipment)
+	{
+		bResult = Character->UnequipSlot(DragOp->SourceEquipmentSlot, DropCellX, DropCellY);
+	}
+	else
+	{
+		bResult = Character->MoveInventoryItem(
+				DragOp->ItemRow,
+				DragOp->SourceCellX,
+				DragOp->SourceCellY,
+				DropCellX,
+				DropCellY);
+	}
+
+	return bResult;
 }
 
 void UInventoryWidget::SetAllItems(const TArray<FInventoryItemEntry>& NewItems)
@@ -192,7 +245,7 @@ void UInventoryWidget::CreateItemWidget(const FInventoryItemEntry& Entry)
 		return;
 	}
 
-	ItemWidget->InitItem(Entry.ItemRow, Entry.SizeInCells);
+	ItemWidget->InitItem(Entry);
 	ItemWidget->OnItemDoubleClicked.AddDynamic(this, &UInventoryWidget::HandleItemSlotDoubleClicked);
 
 	const float PosX = Entry.CellX * CellSize;

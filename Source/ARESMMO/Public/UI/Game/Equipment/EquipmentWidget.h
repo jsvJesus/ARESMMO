@@ -7,6 +7,8 @@
 #include "EquipmentWidget.generated.h"
 
 class UEquipmentSlotWidget;
+class UInventoryLayoutWidget;
+class AARESMMOCharacter;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnEquipmentSlotUnequipRequested, EEquipmentSlotType, SlotType);
 
@@ -39,10 +41,16 @@ public:
 	UPROPERTY(BlueprintAssignable, Category="ARES|Equipment")
 	FOnEquipmentSlotUnequipRequested OnUnequipRequested;
 
+	void SetOwningLayout(UInventoryLayoutWidget* Layout);
+
+	AARESMMOCharacter* GetPreviewCharacter() const;
+
 protected:
 	// Быстрый мап: ENUM → виджет
 	UPROPERTY()
 	TMap<EEquipmentSlotType, UEquipmentSlotWidget*> SlotMap;
+
+	TWeakObjectPtr<UInventoryLayoutWidget> OwningLayout;
 
 	virtual void NativeConstruct() override;
 

@@ -1,5 +1,7 @@
 #include "UI/Game/Equipment/EquipmentWidget.h"
 #include "UI/Game/Equipment/EquipmentSlotWidget.h"
+#include "UI/Game/Inventory/InventoryLayoutWidget.h"
+#include "ARESMMO/ARESMMOCharacter.h"
 
 void UEquipmentWidget::NativeConstruct()
 {
@@ -12,6 +14,7 @@ void UEquipmentWidget::NativeConstruct()
 		if (Widget)
 		{
 			Widget->SlotType = Type;      // на всякий случай продублируем
+			Widget->SetOwnerEquipment(this);
 			SlotMap.Add(Type, Widget);
 
 			// подписываемся на даблклик по этому слоту
@@ -39,6 +42,21 @@ void UEquipmentWidget::NativeConstruct()
 	Reg(Slot_Device2,  EEquipmentSlotType::EquipmentSlotDevice2);
 
 	ClearAllSlots();
+}
+
+void UEquipmentWidget::SetOwningLayout(UInventoryLayoutWidget* Layout)
+{
+	OwningLayout = Layout;
+}
+
+AARESMMOCharacter* UEquipmentWidget::GetPreviewCharacter() const
+{
+	if (OwningLayout.IsValid())
+	{
+		return OwningLayout->GetPreviewCharacter();
+	}
+
+	return nullptr;
 }
 
 void UEquipmentWidget::ClearAllSlots()

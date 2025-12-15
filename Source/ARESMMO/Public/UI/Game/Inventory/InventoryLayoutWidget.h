@@ -6,7 +6,6 @@
 #include "Styling/SlateTypes.h"
 #include "InventoryLayoutWidget.generated.h"
 
-class AARESMMOCharacter;
 class UWidgetSwitcher;
 class UInventoryWidget;
 struct FInventoryItemEntry;
@@ -14,6 +13,7 @@ class UImage;
 class UTextureRenderTarget2D;
 class UButton;
 class UEquipmentWidget;
+class ARESMMOCharacter;
 
 UCLASS()
 class ARESMMO_API UInventoryLayoutWidget : public UUserWidget
@@ -165,6 +165,7 @@ protected:
 	virtual void NativeConstruct() override;
 
 	TWeakObjectPtr<AARESMMOCharacter> PreviewCharacter;
+	
 	bool bIsRotatingPreview = false;
 
 	// Обработка мышки для вращения
@@ -179,4 +180,6 @@ public:
 	// Установить текстуру в PlayerRef
 	UFUNCTION(BlueprintCallable, Category="ARES|Inventory")
 	void SetPlayerImage(UTextureRenderTarget2D* RenderTarget);
+
+	AARESMMOCharacter* GetPreviewCharacter() const { return PreviewCharacter.Get(); }
 };

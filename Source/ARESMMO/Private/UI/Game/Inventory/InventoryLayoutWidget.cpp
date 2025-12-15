@@ -18,6 +18,7 @@ void UInventoryLayoutWidget::NativeConstruct()
 	// Слушаем даблклики по слотам экипировки
 	if (EquipmentPanel)
 	{
+		EquipmentPanel->SetOwningLayout(this);
 		EquipmentPanel->OnUnequipRequested.AddDynamic(this, &UInventoryLayoutWidget::HandleUnequipRequested);
 	}
 	
@@ -27,9 +28,8 @@ void UInventoryLayoutWidget::NativeConstruct()
 		if (InvWidget)
 		{
 			InvWidget->OnItemEquipRequested.AddDynamic(
-				this,
-				&UInventoryLayoutWidget::HandleInventoryItemEquipRequested
-			);
+				this, &UInventoryLayoutWidget::HandleInventoryItemEquipRequested);
+			InvWidget->SetOwningLayout(this);
 		}
 	};
 
@@ -210,7 +210,7 @@ void UInventoryLayoutWidget::HandleUnequipRequested(EEquipmentSlotType SlotType)
 
 	if (AARESMMOCharacter* Char = PreviewCharacter.Get())
 	{
-		Char->UnequipSlot(SlotType);
+		Char->UnequipSlot(SlotType, INDEX_NONE, INDEX_NONE);
 	}
 }
 
@@ -221,7 +221,7 @@ void UInventoryLayoutWidget::HandleInventoryItemEquipRequested(const FItemBaseRo
 		return;
 	}
 
-	if (AARESMMOCharacter* Char = PreviewCharacter.Get())
+	if (AARESMMOCharacter* Char = Cast<AARESMMOCharacter>(PreviewCharacter.Get()))
 	{
 		Char->EquipItemFromInventory(ItemRow);
 	}

@@ -3,8 +3,10 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Items/ItemData.h"
+#include "Blueprint/DragDropOperation.h"
 #include "InventoryWidget.generated.h"
 
+class UInventoryLayoutWidget;
 class UItemSlotWidget;
 class UCanvasPanel;
 class UUserWidget;
@@ -84,8 +86,16 @@ public:
 	UPROPERTY(BlueprintAssignable, Category="ARES|Inventory")
 	FOnInventoryItemEquipRequested OnItemEquipRequested;
 
+	void SetOwningLayout(UInventoryLayoutWidget* Layout);
+
 protected:
 	virtual void NativeConstruct() override;
+
+	virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent,
+				UDragDropOperation* InOperation) override;
+
+	virtual bool NativeOnDragOver(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent,
+			UDragDropOperation* InOperation) override;
 
 	/** Построение пустых слотов, с учётом занятых ячеек предметами */
 	void BuildEmptySlots(const TArray<FInventoryItemEntry>& SourceItems);
@@ -101,4 +111,6 @@ protected:
 
 	UFUNCTION()
 	void HandleItemSlotDoubleClicked(const FItemBaseRow& ItemRow);
+
+	TWeakObjectPtr<UInventoryLayoutWidget> OwningLayout;
 };

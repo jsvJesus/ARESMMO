@@ -1,6 +1,11 @@
 #include "UI/Game/Inventory/ItemSlotWidget.h"
+#include "UI/Game/Inventory/ItemDragDropOperation.h"
+#include "UI/Game/Inventory/InventoryWidget.h"
+#include "Blueprint/WidgetBlueprintLibrary.h"
 #include "Components/Image.h"
+#include "Components/SizeBox.h"
 #include "Components/TextBlock.h"
+#include "Components/PanelWidget.h"
 #include "Items/ItemConditionLibrary.h"
 #include "Engine/Texture2D.h"
 
@@ -20,13 +25,90 @@ FReply UItemSlotWidget::NativeOnMouseButtonDoubleClick(const FGeometry& InGeomet
 	return Super::NativeOnMouseButtonDoubleClick(InGeometry, InMouseEvent);
 }
 
+FReply UItemSlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
+	{
+		return UWidgetBlueprintLibrary::DetectDragIfPressed(InMouseEvent, this, EKeys::LeftMouseButton).NativeReply;
+	}
+
+	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+void UItemSlotWidget::NativeOnDragDetected(
+    const FGeometry& InGeometry,
+    const FPointerEvent& InMouseEvent,
+    UDragDropOperation*& OutOperation)
+{
+    UItemDragDropOperation* DragOp = Cast<UItemDragDropOperation>(
+        UWidgetBlueprintLibrary::CreateDragDropOperation(UItemDragDropOperation::StaticClass()));
+
+    if (!DragOp)
+    {
+        return;
+    }
+	
+    DragOp->ItemRow       = CurrentItemRow;
+    DragOp->SourceCellX   = CurrentCellX;
+    DragOp->SourceCellY   = CurrentCellY;
+    DragOp->bFromEquipment = bFromEquipment;
+    DragOp->SourceEquipmentSlot = SourceEquipmentSlot;
+    DragOp->Pivot = EDragPivot::MouseDown;
+	
+    UItemSlotWidget* DragVisual = CreateWidget<UItemSlotWidget>(GetOwningPlayer(), GetClass());
+    if (DragVisual)
+    {
+        if (DragVisual->BackgroundImage && BackgroundImage)
+        {
+            DragVisual->BackgroundImage->SetBrush(BackgroundImage->GetBrush());
+            DragVisual->BackgroundImage->SetVisibility(ESlateVisibility::HitTestInvisible);
+        }
+    	
+        if (DragVisual->IconImage && IconImage)
+        {
+            DragVisual->IconImage->SetBrush(IconImage->GetBrush());
+            DragVisual->IconImage->SetVisibility(ESlateVisibility::HitTestInvisible);
+        }
+    	
+        if (DragVisual->NameText)
+        {
+            DragVisual->NameText->SetText(CurrentItemRow.DisplayName);
+            DragVisual->NameText->SetVisibility(ESlateVisibility::HitTestInvisible);
+        }
+    	
+        if (DragVisual->StackText)     DragVisual->StackText->SetVisibility(ESlateVisibility::Collapsed);
+        if (DragVisual->WeightText)    DragVisual->WeightText->SetVisibility(ESlateVisibility::Collapsed);
+        if (DragVisual->ConditionText) DragVisual->ConditionText->SetVisibility(ESlateVisibility::Collapsed);
+        if (DragVisual->ChargeText)    DragVisual->ChargeText->SetVisibility(ESlateVisibility::Collapsed);
+    	
+        DragVisual->SetDesiredSizeInViewport(
+            FVector2D(CurrentItemSize.Width * 64.f, CurrentItemSize.Height * 64.f)
+        );
+
+        DragVisual->SetIsEnabled(false);
+        DragOp->DefaultDragVisual = DragVisual;
+    }
+    else
+    {
+        DragOp->DefaultDragVisual = this;
+    }
+
+    OutOperation = DragOp;
+}
+
 // одна клетка = 64 px
 static constexpr float CELL_PX = 64.f;
 
-void UItemSlotWidget::InitItem(const FItemBaseRow& ItemRow, const FItemSize& GridSize)
+void UItemSlotWidget::InitItem(const FInventoryItemEntry& Entry)
 {
-	CurrentItemRow = ItemRow;
-	
+	CurrentItemRow = Entry.ItemRow;
+	CurrentItemSize = Entry.SizeInCells;
+	CurrentCellX = Entry.CellX;
+	CurrentCellY = Entry.CellY;
+
+	const FItemBaseRow& ItemRow = Entry.ItemRow;
+	const FItemSize& GridSize = Entry.SizeInCells;
+
 	const int32 W = GridSize.Width;
 	const int32 H = GridSize.Height;
 
@@ -107,23 +189,7 @@ void UItemSlotWidget::InitItem(const FItemBaseRow& ItemRow, const FItemSize& Gri
 
 		WeightText->SetText(FText::FromString(FString::Printf(TEXT("%.1f"), EffectiveWeight)));
 	}
-
-	// ---------- ПРОЧНОСТЬ ПРЕДМЕТА (Durability %) ----------
-	/*const bool bUsesDurability =
-		(ItemRow.StoreCategory == EStoreCategory::storecat_Armor  ||
-		 ItemRow.StoreCategory == EStoreCategory::storecat_Helmet ||
-		 ItemRow.StoreCategory == EStoreCategory::storecat_Mask   ||
-		 ItemRow.StoreCategory == EStoreCategory::storecat_ASR    ||
-		 ItemRow.StoreCategory == EStoreCategory::storecat_SNP    ||
-		 ItemRow.StoreCategory == EStoreCategory::storecat_SHTG   ||
-		 ItemRow.StoreCategory == EStoreCategory::storecat_HG     ||
-		 ItemRow.StoreCategory == EStoreCategory::storecat_MG     ||
-		 ItemRow.StoreCategory == EStoreCategory::storecat_SMG    ||
-		 ItemRow.StoreCategory == EStoreCategory::storecat_MELEE  ||
-		 ItemRow.StoreCategory == EStoreCategory::storecat_CraftItems ||
-		 ItemRow.StoreCategory == EStoreCategory::storecat_PlaceItem);
-	*/
-
+	
 	if (ConditionText)
 	{
 		const bool bUsesDurability = (ItemRow.bUseRepair && ItemRow.MaxDurability > 0);
@@ -152,16 +218,6 @@ void UItemSlotWidget::InitItem(const FItemBaseRow& ItemRow, const FItemSize& Gri
 			ConditionText->SetText(FText::GetEmpty());
 		}
 	}
-
-	// ---------- ЗАРЯД ПРЕДМЕТА (Charge %) по подкатегориям ----------
-	/*const bool bUsesCharge =
-		(ItemRow.StoreSubCategory == EStoreSubCategory::Usable_PDA          ||
-		 ItemRow.StoreSubCategory == EStoreSubCategory::Usable_Detector    ||
-		 ItemRow.StoreSubCategory == EStoreSubCategory::WeaponATTM_Laser   ||
-		 ItemRow.StoreSubCategory == EStoreSubCategory::WeaponATTM_Flashlight ||
-		 ItemRow.StoreSubCategory == EStoreSubCategory::GearATTM_NVG       ||
-		 ItemRow.StoreSubCategory == EStoreSubCategory::GearATTM_Headlamp);
-	*/
 
 	if (ChargeText)
 	{

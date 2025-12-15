@@ -225,7 +225,7 @@ public:
 
 	// ===== Equipment =====
 	UFUNCTION(BlueprintCallable, Category="ARES|Equipment")
-	bool UnequipSlot(EEquipmentSlotType SlotType);
+	bool UnequipSlot(EEquipmentSlotType SlotType, int32 TargetCellX, int32 TargetCellY);
 
 	// ===== Inventory / Fast Equip =====
 	UFUNCTION(BlueprintCallable, Category="ARES|Inventory")
@@ -248,6 +248,14 @@ public:
 	/** Добавить предмет в инвентарь (по строке DataTable) */
 	UFUNCTION(BlueprintCallable, Category="ARES|Inventory")
 	bool AddItemToInventory(const FItemBaseRow& ItemRow, int32 StackCount);
+
+	UFUNCTION(BlueprintCallable, Category="ARES|Inventory")
+	bool AddItemToInventoryAt(const FItemBaseRow& ItemRow, int32 CellX, int32 CellY);
+
+	UFUNCTION(BlueprintCallable, Category="ARES|Inventory")
+	bool MoveInventoryItem(const FItemBaseRow& ItemRow, int32 FromX, int32 FromY, int32 ToX, int32 ToY);
+
+	bool CanPlaceInventoryEntry(const FInventoryItemEntry& Entry, int32 IgnoreIndex) const;
 
 	/** Подобрать актор предмета в мире */
 	UFUNCTION(BlueprintCallable, Category="ARES|Inventory")

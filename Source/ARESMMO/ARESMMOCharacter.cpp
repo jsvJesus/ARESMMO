@@ -679,7 +679,7 @@ bool AARESMMOCharacter::EquipItemFromInventory(const FItemBaseRow& ItemRow)
 	return true;
 }
 
-bool AARESMMOCharacter::UnequipSlot(EEquipmentSlotType SlotType)
+bool AARESMMOCharacter::UnequipSlot(EEquipmentSlotType SlotType, int32 TargetCellX, int32 TargetCellY)
 {
 	FItemBaseRow RemovedItem;
 
@@ -762,18 +762,33 @@ bool AARESMMOCharacter::UnequipSlot(EEquipmentSlotType SlotType)
 	}
 
 	// Пытаемся вернуть предмет в инвентарь
-	const bool bAdded = AddItemToInventory(RemovedItem, 1);
+	bool bAdded = false;
+
+	if (TargetCellX != INDEX_NONE && TargetCellY != INDEX_NONE)
+	{
+		bAdded = AddItemToInventoryAt(RemovedItem, TargetCellX, TargetCellY);
+	}
+
 	if (!bAdded)
 	{
-		// нет места — откатываем (чтоб не терять предмет)
+		bAdded = AddItemToInventory(RemovedItem, 1);
+	}
+
+	if (!bAdded)
+	{
 		EquipmentSlots.Add(SlotType, RemovedItem);
-		EquipItem(RemovedItem); // вернём визуал/weapon state
+		EquipItem(RemovedItem);
+
+		if (InventoryLayoutWidgetInstance)
+		{
+			InventoryLayoutWidgetInstance->SetEquipment(EquipmentSlots);
+		}
+
 		UE_LOG(LogTemp, Warning, TEXT("UnequipSlot: no space in inventory for %s, reverting"),
 			*RemovedItem.InternalName.ToString());
 		return false;
 	}
-
-	// Обновляем панель экипировки в UI
+	
 	if (InventoryLayoutWidgetInstance)
 	{
 		InventoryLayoutWidgetInstance->SetEquipment(EquipmentSlots);
@@ -1126,6 +1141,94 @@ void AARESMMOCharacter::AddInventoryPreviewYaw(float DeltaYaw)
 	InventoryPreviewPivot->SetRelativeRotation(Rot);
 }
 
+bool AARESMMOCharacter::MoveInventoryItem(const FItemBaseRow& ItemRow, int32 FromX, int32 FromY, int32 ToX, int32 ToY)
+{
+	const int32 Index = InventoryItems.IndexOfByPredicate([
+						&ItemRow, FromX, FromY](const FInventoryItemEntry& Entry)
+						{
+								return Entry.ItemRow.InternalName == ItemRow.InternalName &&
+										Entry.CellX == FromX && Entry.CellY == FromY;
+						});
+
+	if (Index == INDEX_NONE)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("MoveInventoryItem: source item not found"));
+		return false;
+	}
+
+	FInventoryItemEntry& Entry = InventoryItems[Index];
+	const int32 PrevX = Entry.CellX;
+	const int32 PrevY = Entry.CellY;
+
+	Entry.CellX = ToX;
+	Entry.CellY = ToY;
+
+	if (!CanPlaceInventoryEntry(Entry, Index))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("MoveInventoryItem: cannot place item to %d,%d"), ToX, ToY);
+		Entry.CellX = PrevX;
+		Entry.CellY = PrevY;
+		return false;
+	}
+
+	if (InventoryLayoutWidgetInstance)
+	{
+		InventoryLayoutWidgetInstance->DistributeItems(InventoryItems);
+		InventoryLayoutWidgetInstance->SetEquipment(EquipmentSlots);
+	}
+
+	return true;
+}
+
+bool AARESMMOCharacter::CanPlaceInventoryEntry(const FInventoryItemEntry& Entry, int32 IgnoreIndex) const
+{
+	if (InventoryWidthCells <= 0 || InventoryHeightCells <= 0)
+	{
+		return false;
+	}
+
+	const int32 ItemW = Entry.SizeInCells.Width;
+	const int32 ItemH = Entry.SizeInCells.Height;
+
+	if (ItemW <= 0 || ItemH <= 0)
+	{
+		return false;
+	}
+
+	// Проверка выхода за границы
+	if (Entry.CellX < 0 || Entry.CellY < 0 ||
+			Entry.CellX + ItemW > InventoryWidthCells ||
+			Entry.CellY + ItemH > InventoryHeightCells)
+	{
+		return false;
+	}
+
+	const int32 NewX2 = Entry.CellX + ItemW;
+	const int32 NewY2 = Entry.CellY + ItemH;
+
+	for (int32 Index = 0; Index < InventoryItems.Num(); ++Index)
+	{
+		if (Index == IgnoreIndex)
+		{
+			continue;
+		}
+
+		const FInventoryItemEntry& Other = InventoryItems[Index];
+		const int32 OtherX2 = Other.CellX + Other.SizeInCells.Width;
+		const int32 OtherY2 = Other.CellY + Other.SizeInCells.Height;
+
+		const bool bNoOverlap = (NewX2 <= Other.CellX || Entry.CellX >= OtherX2 ||
+				NewY2 <= Other.CellY || Entry.CellY >= OtherY2);
+
+		if (!bNoOverlap)
+		{
+			return false;
+		}
+	}
+
+	return true;
+}
+
 bool AARESMMOCharacter::AddItemToInventory(const FItemBaseRow& ItemRow, int32 StackCount)
 {
 	if (InventoryWidthCells <= 0 || InventoryHeightCells <= 0)
@@ -1229,6 +1332,30 @@ bool AARESMMOCharacter::AddItemToInventory(const FItemBaseRow& ItemRow, int32 St
 		*ItemRow.InternalName.ToString());
 
 	return false;
+}
+
+bool AARESMMOCharacter::AddItemToInventoryAt(const FItemBaseRow& ItemRow, int32 CellX, int32 CellY)
+{
+	FInventoryItemEntry NewEntry;
+	NewEntry.ItemRow = ItemRow;
+	NewEntry.SizeInCells = UItemSizeRules::GetDefaultSize(ItemRow.ItemClass);
+	NewEntry.CellX = CellX;
+	NewEntry.CellY = CellY;
+
+	if (!CanPlaceInventoryEntry(NewEntry, INDEX_NONE))
+	{
+		return false;
+	}
+
+	InventoryItems.Add(NewEntry);
+
+	if (InventoryLayoutWidgetInstance)
+	{
+		InventoryLayoutWidgetInstance->DistributeItems(InventoryItems);
+		InventoryLayoutWidgetInstance->SetEquipment(EquipmentSlots);
+	}
+
+	return true;
 }
 
 void AARESMMOCharacter::PickupWorldItem(AWorldItemActor* WorldItem)
