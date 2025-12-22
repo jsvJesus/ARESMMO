@@ -27,6 +27,23 @@ void UARESMMOAnimInstance::NativeUpdateAnimation(float DeltaSeconds)
 	if (!Char || !Char->GetMesh())
 		return;
 
+	// === тут копируем движение всегда ===
+	Velocity		= Char->Velocity;
+	GroundSpeed		= Char->GroundSpeed;
+	Acceleration	= Char->Acceleration;
+	ShouldMove		= Char->bShouldMove;
+	IsFalling		= Char->bIsFalling;
+	DirectionAngle	= Char->DirectionAngle;
+	TurnRate		= Char->TurnRate;
+	
+	Client_WeaponState   = Char->WeaponState;
+	Client_MovementState = Char->MoveDirection;
+	
+	F_OrientationAngle = Char->GetFOrientationAngle();
+	R_OrientationAngle = Char->GetROrientationAngle();
+	B_OrientationAngle = Char->GetBOrientationAngle();
+	L_OrientationAngle = Char->GetLOrientationAngle();
+
 	AWeaponBase* Weapon = Char->GetSelectedWeapon();
 	if (!Weapon)
 		return;

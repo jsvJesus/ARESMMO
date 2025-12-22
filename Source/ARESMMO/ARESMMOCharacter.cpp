@@ -233,6 +233,10 @@ AARESMMOCharacter::AARESMMOCharacter()
 	Mesh_Head = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Mesh_Head")); // Head
 	Mesh_Head->SetupAttachment(GetMesh());
 	Mesh_Head->SetLeaderPoseComponent(GetMesh());
+
+	Mesh_Hand = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Mesh_Hand")); // Hand
+	Mesh_Hand->SetupAttachment(GetMesh());
+	Mesh_Hand->SetLeaderPoseComponent(GetMesh());
 	
 	Mesh_Body = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Mesh_Body")); // Body
 	Mesh_Body->SetupAttachment(GetMesh());
@@ -330,6 +334,10 @@ void AARESMMOCharacter::BeginPlay()
 	{
 		DefaultHeadMesh = Mesh_Head->GetSkeletalMeshAsset();
 	}
+	if (Mesh_Hand)
+	{
+		DefaultHandMesh = Mesh_Hand->GetSkeletalMeshAsset();
+	}
 	if (Mesh_Body)
 	{
 		DefaultBodyMesh = Mesh_Body->GetSkeletalMeshAsset();
@@ -376,9 +384,28 @@ void AARESMMOCharacter::BeginPlay()
 	SetSelectedWeaponInternal(GetBestWeaponForAttachment());
 }
 
+void AARESMMOCharacter::EndPlay(const EEndPlayReason::Type EndPlayReason)
+{
+	if (InventoryPreviewActor)
+	{
+		InventoryPreviewActor->Destroy();
+		InventoryPreviewActor = nullptr;
+	}
+
+	if (GameHUDWidgetInstance)
+	{
+		GameHUDWidgetInstance->RemoveFromParent();
+		GameHUDWidgetInstance = nullptr;
+	}
+
+	Super::EndPlay(EndPlayReason);
+}
+
 void AARESMMOCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+
+	UpdateAnimMovementData(DeltaSeconds);
 
 	// --------- Стамина от спринта ---------
 	if (bIsSprinting && Stats)
@@ -461,6 +488,75 @@ void AARESMMOCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCo
 	}
 }
 
+void AARESMMOCharacter::UpdateAnimMovementData(float DeltaSeconds)
+{
+	UCharacterMovementComponent* Move = GetCharacterMovement();
+	if (!Move) return;
+
+	// ===== Velocity / GroundSpeed (XY only) =====
+	Velocity = Move->Velocity;
+	GroundSpeed = FVector(Velocity.X, Velocity.Y, 0.0f).Size();
+
+	// ===== Acceleration / Falling / Crouch =====
+	Acceleration = Move->GetCurrentAcceleration();
+	bIsFalling = Move->IsFalling();
+	bIsCrouching = Move->IsCrouching();
+
+	// ===== ShouldMove =====
+	const bool bSpeedOk = (GroundSpeed > 3.0f);
+	const bool bHasAccel = !Acceleration.IsNearlyZero(1.0f);
+	bShouldMove = bSpeedOk && bHasAccel;
+
+	// ===== Direction (как CalculateDirection + NormalizeAxis) =====
+	const FVector Vel2D = FVector(Velocity.X, Velocity.Y, 0.0f);
+	if (Vel2D.SizeSquared() > FMath::Square(3.0f))
+	{
+		const FRotator BaseRot(0.0f, GetActorRotation().Yaw, 0.0f);
+		const FVector Forward = FRotationMatrix(BaseRot).GetUnitAxis(EAxis::X);
+		const FVector Right   = FRotationMatrix(BaseRot).GetUnitAxis(EAxis::Y);
+
+		const float ForwardVel = FVector::DotProduct(Vel2D, Forward);
+		const float RightVel   = FVector::DotProduct(Vel2D, Right);
+
+		Direction = FMath::UnwindDegrees(FMath::RadiansToDegrees(FMath::Atan2(RightVel, ForwardVel)));
+	}
+	else
+	{
+		Direction = 0.0f;
+	}
+
+	// ===== MoveDirection (Client_MovementState) =====
+	if (!bSpeedOk)
+	{
+		MoveDirection = EMoveDirection::None;
+	}
+	else if (Direction >= -70.0f && Direction <= 70.0f)
+	{
+		MoveDirection = EMoveDirection::Forward;
+	}
+	else if (Direction >= 70.0f && Direction <= 110.0f)
+	{
+		MoveDirection = EMoveDirection::Right;
+	}
+	else if (Direction >= -110.0f && Direction <= -70.0f)
+	{
+		MoveDirection = EMoveDirection::Left;
+	}
+	else
+	{
+		MoveDirection = EMoveDirection::Backward;
+	}
+
+	// ===== DirectionAngle =====
+	DirectionAngle = FMath::FInterpTo(DirectionAngle, TurnRate, DeltaSeconds, 10.0f);
+
+	// ===== Orientation Angles for Orientation Warping =====
+	F_OrientationAngle = FMath::UnwindDegrees(Direction - 0.0f);
+	R_OrientationAngle = FMath::UnwindDegrees(Direction - 90.0f);
+	B_OrientationAngle = FMath::UnwindDegrees(Direction - 180.0f);
+	L_OrientationAngle = FMath::UnwindDegrees(Direction - (-90.0f));
+}
+
 void AARESMMOCharacter::Move(const FInputActionValue& Value)
 {
 	// input is a Vector2D
@@ -479,7 +575,7 @@ void AARESMMOCharacter::Move(const FInputActionValue& Value)
 	}
 }
 
-void AARESMMOCharacter::Look(const FInputActionValue& Value)
+/*void AARESMMOCharacter::Look(const FInputActionValue& Value)
 {
 	// input is a Vector2D
 	FVector2D LookAxisVector = Value.Get<FVector2D>();
@@ -490,6 +586,19 @@ void AARESMMOCharacter::Look(const FInputActionValue& Value)
 		AddControllerYawInput(LookAxisVector.X);
 		AddControllerPitchInput(LookAxisVector.Y);
 	}
+}*/
+
+void AARESMMOCharacter::Look(const FInputActionValue& Value)
+{
+	const FVector2D LookAxisVector = Value.Get<FVector2D>();
+	if (!Controller) return;
+
+	// сигнал для AnimBP
+	TurnRate = FMath::Clamp(LookAxisVector.X * TurnRateScale, -1.0f, 1.0f);
+
+	// сама камера — без clamp
+	AddControllerYawInput(LookAxisVector.X * MouseYawSensitivity);
+	AddControllerPitchInput(LookAxisVector.Y * MousePitchSensitivity);
 }
 
 void AARESMMOCharacter::Sprinting(const FInputActionValue& Value)
@@ -1273,7 +1382,18 @@ bool AARESMMOCharacter::EquipWeaponActorToSlot(const FItemBaseRow& ItemRow, EEqu
 
 	NewWeapon->SetOwningCharacter(this);
 
-	const FName AttachName = ResolveWeaponAttachName(SlotType, ItemRow);
+	FName AttachName = NewWeapon->GetCharacterAttachSocket();
+	if (AttachName.IsNone())
+	{
+		AttachName = TEXT("weapon_r");
+	}
+
+	// Если сокета нет на персонаже — жёсткий fallback на weapon_r
+	if (!GetMesh()->DoesSocketExist(AttachName))
+	{
+		AttachName = TEXT("weapon_r");
+	}
+
 	NewWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachName);
 
 	SetWeaponActorInSlot(SlotType, NewWeapon);
@@ -1304,30 +1424,6 @@ void AARESMMOCharacter::DestroyWeaponActorInSlot(EEquipmentSlotType SlotType)
 	}
 
 	UpdateInventoryPreviewShowOnly();
-}
-
-FName AARESMMOCharacter::ResolveWeaponAttachName(EEquipmentSlotType SlotType, const FItemBaseRow& ItemRow) const
-{
-	// Override из DT
-	if (!ItemRow.WeaponEquipSocketName.IsNone())
-	{
-		return ItemRow.WeaponEquipSocketName;
-	}
-
-	// По слоту
-	static const FName Socket_Rifle(TEXT("Rifle_Socket"));
-	static const FName Socket_Pistol(TEXT("Pistol_Socket"));
-	static const FName Bone_WeaponR(TEXT("weapon_r"));
-
-	FName Wanted = Bone_WeaponR;
-
-	if (SlotType == EEquipmentSlotType::EquipmentSlotPistol)
-		Wanted = Socket_Pistol;
-	else if (SlotType == EEquipmentSlotType::EquipmentSlotWeapon1 || SlotType == EEquipmentSlotType::EquipmentSlotWeapon2)
-		Wanted = Socket_Rifle;
-
-	// Fallback если сокета нет
-	return GetMesh()->DoesSocketExist(Wanted) ? Wanted : Bone_WeaponR;
 }
 
 void AARESMMOCharacter::UpdateInventoryPreviewShowOnly()

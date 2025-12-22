@@ -82,7 +82,10 @@ protected:
 	UPROPERTY(BlueprintReadOnly, Category="ARES|Weapon")
 	TObjectPtr<AARESMMOCharacter> OwningCharacter = nullptr;
 
-	// ===== IK sockets on WeaponMesh =====
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|Weapon|Attach")
+	FName CharacterAttachSocket = TEXT("weapon_r");
+
+	// ===== IK sockets on CHARACTER mesh (NOT on WeaponMesh) =====
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|Weapon|IK")
 	FName LeftHandIKSocket = TEXT("Hand_L_Socket");
 
@@ -98,4 +101,7 @@ protected:
 public:
 	UFUNCTION(BlueprintCallable, Category="ARES|Weapon|IK")
 	bool GetHandIKTransforms_World(FTransform& OutL, FTransform& OutR) const;
+
+	UFUNCTION(BlueprintPure, Category="ARES|Weapon|Attach")
+	FName GetCharacterAttachSocket() const { return CharacterAttachSocket; }
 };

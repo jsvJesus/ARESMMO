@@ -65,29 +65,32 @@ bool AWeaponBase::GetHandIKTransforms_World(FTransform& OutL, FTransform& OutR) 
 	OutL = FTransform::Identity;
 	OutR = FTransform::Identity;
 
-	if (!WeaponMesh)
+	if (!OwningCharacter || !OwningCharacter->GetMesh())
 		return false;
 
-	const bool bHasL = WeaponMesh->DoesSocketExist(LeftHandIKSocket);
-	const bool bHasR = WeaponMesh->DoesSocketExist(RightHandIKSocket);
+	USkeletalMeshComponent* CharMesh = OwningCharacter->GetMesh();
+
+	const bool bHasL = CharMesh->DoesSocketExist(LeftHandIKSocket);
+	const bool bHasR = CharMesh->DoesSocketExist(RightHandIKSocket);
 
 	if (!bHasL)
 	{
+		// Не ломаем анимацию: просто вернём false и IK вес останется 0
 		UE_LOG(LogTemp, Warning,
-			TEXT("Weapon %s: missing LEFT IK socket (%s). Mesh=%s"),
+			TEXT("Weapon %s: missing LEFT IK socket on CHARACTER (%s). CharacterMesh=%s"),
 			*GetName(),
 			*LeftHandIKSocket.ToString(),
-			*GetNameSafe(WeaponMesh->GetSkeletalMeshAsset())
+			*GetNameSafe(CharMesh->GetSkeletalMeshAsset())
 		);
 		return false;
 	}
 
-	OutL = WeaponMesh->GetSocketTransform(LeftHandIKSocket, RTS_World);
+	OutL = CharMesh->GetSocketTransform(LeftHandIKSocket, RTS_World);
 
-	// Right socket НЕ обязателен (можно оставить на будущее)
+	// Right socket не обязателен
 	if (bHasR)
 	{
-		OutR = WeaponMesh->GetSocketTransform(RightHandIKSocket, RTS_World);
+		OutR = CharMesh->GetSocketTransform(RightHandIKSocket, RTS_World);
 	}
 
 	return true;

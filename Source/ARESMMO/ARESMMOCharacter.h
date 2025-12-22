@@ -105,8 +105,12 @@ protected:
 	
 	virtual void Tick(float DeltaSeconds) override;
 	virtual void BeginPlay() override;
+	virtual void EndPlay(const EEndPlayReason::Type EndPlayReason) override;
 	virtual void NotifyControllerChanged() override;
 	virtual void SetupPlayerInputComponent(class UInputComponent* PlayerInputComponent) override;
+
+	// ===== Anim data (calculated on Character) =====
+	void UpdateAnimMovementData(float DeltaSeconds);
 
 	// ===== Inventory =====
 	UFUNCTION(BlueprintCallable, Category="ARES|UI")
@@ -121,9 +125,16 @@ protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|UI")
 	bool bIsInventoryOpen = false;
 
-	// ===== Camera =====
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="ARES|Camera")
-	float TurnRate = 1.0f;
+	// Чувствительность мыши (для самой камеры)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|Camera")
+	float MouseYawSensitivity = 1.0f;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|Camera")
+	float MousePitchSensitivity = 1.0f;
+
+	// Нормализация TurnRate (подбирается под мышь)
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|Camera")
+	float TurnRateScale = 0.10f;
 
 	UFUNCTION(BlueprintCallable, Category="ARES|Anim")
 	void RecalculateWeaponStateFromEquipment();
@@ -134,8 +145,6 @@ protected:
 
 	bool EquipWeaponActorToSlot(const FItemBaseRow& ItemRow, EEquipmentSlotType SlotType);
 	void DestroyWeaponActorInSlot(EEquipmentSlotType SlotType);
-
-	FName ResolveWeaponAttachName(EEquipmentSlotType SlotType, const FItemBaseRow& ItemRow) const;
 
 	// Какое оружие считать "активным" для Attach (пока приоритет Weapon1->Weapon2->Pistol)
 	AWeaponBase* GetBestWeaponForAttachment() const;
@@ -181,8 +190,12 @@ public:
 	void StopSprint();
 
 	// ===== Modular Character Parts =====
+	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|HeroParts")
 	USkeletalMeshComponent* Mesh_Head;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|HeroParts")
+	USkeletalMeshComponent* Mesh_Hand;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|HeroParts")
 	USkeletalMeshComponent* Mesh_Body;
@@ -193,6 +206,9 @@ public:
 	// Дефолтные меши для восстановления при снятии вещей
     UPROPERTY()
     USkeletalMesh* DefaultHeadMesh = nullptr;
+
+	UPROPERTY()
+	USkeletalMesh* DefaultHandMesh = nullptr;
     
     UPROPERTY()
     USkeletalMesh* DefaultBodyMesh = nullptr;
@@ -481,6 +497,10 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|Anim|Orientation", meta=(AllowPrivateAccess="true"))
 	float DirectionAngle = 0.0f;
 
+	// Нормализованный поворот по Yaw [-1..1]
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|Camera", meta=(AllowPrivateAccess="true"))
+	float TurnRate = 0.0f;
+
 	// ============== Movement / BlendSpace ==============
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|Anim|Movement", meta=(AllowPrivateAccess="true"))
 	FVector Velocity = FVector::ZeroVector;
@@ -511,4 +531,23 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|Anim|Movement", meta=(AllowPrivateAccess="true"))
 	bool bIsJump = false;
+
+	// ===== Anim getters (AnimInstance reads only) =====
+	FORCEINLINE const FVector& GetAnimVelocity() const { return Velocity; }
+	FORCEINLINE float GetAnimGroundSpeed() const { return GroundSpeed; }
+	FORCEINLINE const FVector& GetAnimAcceleration() const { return Acceleration; }
+	FORCEINLINE bool GetAnimShouldMove() const { return bShouldMove; }
+	FORCEINLINE bool GetAnimIsFalling() const { return bIsFalling; }
+	FORCEINLINE bool GetAnimIsCrouching() const { return bIsCrouching; }
+
+	FORCEINLINE float GetAnimDirection() const { return Direction; }
+	FORCEINLINE EMoveDirection GetAnimMoveDirection() const { return MoveDirection; }
+
+	FORCEINLINE float GetFOrientationAngle() const { return F_OrientationAngle; }
+	FORCEINLINE float GetROrientationAngle() const { return R_OrientationAngle; }
+	FORCEINLINE float GetBOrientationAngle() const { return B_OrientationAngle; }
+	FORCEINLINE float GetLOrientationAngle() const { return L_OrientationAngle; }
+
+	FORCEINLINE float GetAnimDirectionAngle() const { return DirectionAngle; }
+	FORCEINLINE float GetAnimTurnRate() const { return TurnRate; }
 };
