@@ -6,6 +6,8 @@
 #include "ItemTypes.h"
 #include "ItemData.generated.h"
 
+class AWeaponBase;
+
 USTRUCT(BlueprintType)
 struct FConsumableEffects
 {
@@ -75,7 +77,7 @@ public:
 	int32 ItemID = 0;
 
 	/** Внутреннее имя (для удобства, можно использовать как строковый ID) */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|tem")
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Item")
 	FName InternalName;
 
 	/** Локализуемое название предмета */
@@ -102,20 +104,41 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Consumable")
 	FConsumableEffects ConsumableEffects;
 
-	/** Максимальный размер стака */
+	/** Использует ли предмет стак */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Item")
+	bool bUseStack = false;
+	
+	/** Максимальный размер стака (если bUseStack=true) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Item",
+		meta=(ClampMin="1", EditCondition="bUseStack", EditConditionHides))
 	int32 MaxStackSize = 1;
 
+	/** Использует ли предмет вес */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Item")
-	bool bUseStackSize = false;
-
-	// Текущее количество в стаке
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Item")
-	int32 StackSize = 1;
-
-	/** Вес одного предмета (для системы веса / переноса) */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Item")
+	bool bUseWeight = true;
+	
+	/** Вес одного предмета (если bUseWeight=true) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Item",
+		meta=(ClampMin="0.0", EditCondition="bUseWeight", EditConditionHides))
 	float Weight = 0.0f;
+
+	/** Бонус к максимальному переносимому весу, если предмет экипирован (например рюкзак) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Item")
+	float CarryWeightBonus = 0.0f;
+
+	///////////////////////////////////////////////////////
+	
+	FORCEINLINE int32 GetEffectiveMaxStackSize() const
+	{
+		return bUseStack ? FMath::Max(1, MaxStackSize) : 1;
+	}
+
+	FORCEINLINE float GetUnitWeightKg() const
+	{
+		return bUseWeight ? FMath::Max(0.f, Weight) : 0.f;
+	}
+
+	///////////////////////////////////////////////////////
 
 	/** Иконка для инвентаря / магазина */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="UI")
@@ -135,33 +158,33 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="World")
 	TSoftClassPtr<AActor> WorldActorClass;
 
-	/** Можно ли продавать обратно в магазин */
+	/** Можно ли продавать предмет */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Economy")
 	bool bCanSell = true;
 
-	/** Цена в мягкой валюте (GD, например) */
+	/** Можно ли покупать предмет */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Economy")
-	int32 PriceGD = 0;
+	bool bCanBuy = true;
 
-	/** Цена в донатной валюте (GC, например) */
+	/** Цена в игровой валюте (GD) */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Economy")
-	int32 PriceGC = 0;
+	int32 PriceGameDollars = 0;
 
-	/** Можно ли ремонтировать предметы */
+	/** Цена в донатной валюте (GC) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Economy")
+	int32 PriceGameCoins = 0;
+	
+	/** Использует ли предмет ремонт */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Durability")
-	bool bUseRepair = false;
+    bool bUseDurability = false;
 
 	/** Максимальная прочность */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Durability")
 	int32 MaxDurability = 0;
 
-	/** Стандартная прочность */
+	/** Текущая прочность при создании */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Durability")
 	int32 DefaultDurability = 0;
-
-	/** Текущая прочность */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Durability")
-	int32 CurrDurability = 0;
 
 	/** Использует ли предмет заряд */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Charge")
@@ -171,13 +194,9 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Charge")
 	int32 MaxCharge = 0;
 
-	/** Стандартный заряд */
+	/** Заряд по умолчанию */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Charge")
 	int32 DefaultCharge = 0;
-
-	/** Текущий заряд */
-	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Charge")
-	int32 CurrCharge = 0;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	EHeroPartType HeroPartType = EHeroPartType::None;
@@ -187,6 +206,26 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	EEquipmentSlotType EquipmentSlot = EEquipmentSlotType::None;
+
+	/* ===================== WEAPONS (Actor-based) ===================== */
+
+	/** Класс оружия (Actor), который будет спавниться при экипировке */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon")
+	TSoftClassPtr<AWeaponBase> WeaponActorClass;
+
+	/** Override сокета для экипировки (если пусто — берём по слоту: Rifle_Socket / Pistol_Socket / weapon_r fallback) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Weapon")
+	FName WeaponEquipSocketName = NAME_None;
+
+	/* ===================== WEAPON ATTACHMENTS ===================== */
+
+	/** Mesh для WeaponATTM (если это attachment). Можно StaticMesh (приоритет) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="WeaponAttachment")
+	UStaticMesh* WeaponAttachmentStaticMesh = nullptr;
+
+	/** Mesh для WeaponATTM (если это attachment). Если StaticMesh пуст — можно SkeletalMesh */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="WeaponAttachment")
+	USkeletalMesh* WeaponAttachmentSkeletalMesh = nullptr;
 };
 
 // === Глобальные функции доступа к базе предметов ===

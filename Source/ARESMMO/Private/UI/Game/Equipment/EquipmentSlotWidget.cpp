@@ -1,15 +1,11 @@
 #include "UI/Game/Equipment/EquipmentSlotWidget.h"
-#include "UI/Game/Inventory/ItemDragDropOperation.h"
-#include "UI/Game/Equipment/EquipmentWidget.h"
-#include "UI/Game/Inventory/InventoryWidget.h"
-#include "UI/Game/Inventory/ItemSlotWidget.h"
+#include "UI/Game/Inventory/Context/ItemDragDropOperation.h"
+#include "Items/ItemSizeRules.h"
+#include "Blueprint/WidgetBlueprintLibrary.h"
+#include "InputCoreTypes.h"
 #include "Components/Image.h"
 #include "Components/SizeBox.h"
-#include "Components/TextBlock.h"
-#include "Components/PanelWidget.h"
 #include "Engine/Texture2D.h"
-#include "Items/ItemConditionLibrary.h"
-#include "Blueprint/WidgetBlueprintLibrary.h"
 #include "ARESMMO/ARESMMOCharacter.h"
 
 void UEquipmentSlotWidget::NativeConstruct()
@@ -18,93 +14,6 @@ void UEquipmentSlotWidget::NativeConstruct()
 
 	// При старте слот пустой
 	ClearItem();
-}
-
-FReply UEquipmentSlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
-{
-        if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && bHasItem)
-        {
-                return UWidgetBlueprintLibrary::DetectDragIfPressed(InMouseEvent, this, EKeys::LeftMouseButton).NativeReply;
-        }
-
-        return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
-}
-
-void UEquipmentSlotWidget::NativeOnDragDetected(
-    const FGeometry& InGeometry,
-    const FPointerEvent& InMouseEvent,
-    UDragDropOperation*& OutOperation)
-{
-    Super::NativeOnDragDetected(InGeometry, InMouseEvent, OutOperation);
-
-    if (!bHasItem)
-    {
-        return;
-    }
-
-    UItemDragDropOperation* DragOp = Cast<UItemDragDropOperation>(
-        UWidgetBlueprintLibrary::CreateDragDropOperation(UItemDragDropOperation::StaticClass()));
-
-    if (!DragOp)
-    {
-        return;
-    }
-
-    DragOp->ItemRow = CurrentItemRow;
-    DragOp->ItemSize = CurrentItemRow.GridSize;
-    DragOp->bFromEquipment = true;
-    DragOp->SourceEquipmentSlot = SlotType;
-    DragOp->Pivot = EDragPivot::MouseDown;
-
-	TSubclassOf<UItemSlotWidget> VisualClass = DragVisualItemClass;
-	if (!VisualClass)
-	{
-		VisualClass = UItemSlotWidget::StaticClass();
-	}
-	UItemSlotWidget* DragVisual = CreateWidget<UItemSlotWidget>(GetOwningPlayer(), VisualClass);
-	
-    if (DragVisual)
-    {
-        FInventoryItemEntry DragEntry;
-        DragEntry.ItemRow     = CurrentItemRow;
-        DragEntry.SizeInCells = CurrentItemRow.GridSize;
-
-        DragVisual->InitItem(DragEntry);
-        DragVisual->SetFromEquipmentSlot(SlotType);
-        DragVisual->SetIsEnabled(false);
-
-        DragOp->DefaultDragVisual = DragVisual;
-    }
-    else
-    {
-        DragOp->DefaultDragVisual = this;
-    }
-
-    OutOperation = DragOp;
-}
-
-bool UEquipmentSlotWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent,
-        UDragDropOperation* InOperation)
-{
-        const UItemDragDropOperation* DragOp = Cast<UItemDragDropOperation>(InOperation);
-
-        if (!DragOp || !OwnerEquipment.IsValid())
-        {
-                return Super::NativeOnDrop(InGeometry, InDragDropEvent, InOperation);
-        }
-
-        AARESMMOCharacter* Character = OwnerEquipment->GetPreviewCharacter();
-        if (!Character)
-        {
-                return Super::NativeOnDrop(InGeometry, InDragDropEvent, InOperation);
-        }
-
-        if (!DragOp->bFromEquipment)
-        {
-                return Character->EquipItemFromInventory(DragOp->ItemRow);
-        }
-
-        return Super::NativeOnDrop(InGeometry, InDragDropEvent, InOperation);
 }
 
 void UEquipmentSlotWidget::ClearItem()
@@ -125,18 +34,6 @@ void UEquipmentSlotWidget::ClearItem()
 		SlotSizeBox->ClearWidthOverride();
 		SlotSizeBox->ClearHeightOverride();
 	}
-
-	// Спрятать название
-	if (NameText)
-		NameText->SetText(FText::GetEmpty());
-
-	// Спрятать прочность
-	if (ConditionText)
-		ConditionText->SetText(FText::GetEmpty());
-
-	// Спрятать заряд
-	if (ChargeText)
-		ChargeText->SetText(FText::GetEmpty());
 }
 
 void UEquipmentSlotWidget::SetItem(const FItemBaseRow& ItemRow)
@@ -169,65 +66,6 @@ void UEquipmentSlotWidget::SetItem(const FItemBaseRow& ItemRow)
 			ItemIcon->SetVisibility(ESlateVisibility::Hidden);
 		}
 	}
-
-	// --- Ставим название ---
-	if (NameText)
-	{
-		NameText->SetText(ItemRow.DisplayName);
-	}
-	
-	// --- Ставим прочность ---
-	if (ConditionText)
-	{
-		const bool bUsesDurability = (ItemRow.bUseRepair && ItemRow.MaxDurability > 0);
-
-		if (bUsesDurability)
-		{
-			const int32 Max = ItemRow.MaxDurability;
-			int32 Current = ItemRow.CurrDurability;
-			if (Current <= 0 && ItemRow.DefaultDurability > 0) Current = ItemRow.DefaultDurability;
-			Current = FMath::Clamp(Current, 0, Max);
-
-			const int32 PctInt = FMath::RoundToInt((static_cast<float>(Current) / static_cast<float>(Max)) * 100.f);
-			ConditionText->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), PctInt)));
-
-			const EItemConditionState State = UItemConditionLibrary::GetConditionStateFromValues(Current, Max);
-			ConditionText->SetColorAndOpacity(UItemConditionLibrary::GetConditionColor(State));
-		}
-		else
-		{
-			ConditionText->SetText(FText::GetEmpty());
-		}
-	}
-	
-	// --- Ставим заряд ---
-	if (ChargeText)
-	{
-		const bool bUsesCharge = (ItemRow.bUseCharge && ItemRow.MaxCharge > 0);
-
-		if (bUsesCharge)
-		{
-			const int32 Max = ItemRow.MaxCharge;
-			int32 Current = ItemRow.CurrCharge;
-			if (Current <= 0 && ItemRow.DefaultCharge > 0) Current = ItemRow.DefaultCharge;
-			Current = FMath::Clamp(Current, 0, Max);
-
-			const int32 PctInt = FMath::RoundToInt((static_cast<float>(Current) / static_cast<float>(Max)) * 100.f);
-			ChargeText->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), PctInt)));
-
-			const EItemConditionState State = UItemConditionLibrary::GetConditionStateFromValues(Current, Max);
-			ChargeText->SetColorAndOpacity(UItemConditionLibrary::GetConditionColor(State));
-		}
-		else
-		{
-			ChargeText->SetText(FText::GetEmpty());
-		}
-	}
-}
-
-void UEquipmentSlotWidget::SetOwnerEquipment(UEquipmentWidget* InOwner)
-{
-	OwnerEquipment = InOwner;
 }
 
 FReply UEquipmentSlotWidget::NativeOnMouseButtonDoubleClick(
@@ -242,4 +80,75 @@ FReply UEquipmentSlotWidget::NativeOnMouseButtonDoubleClick(
 	}
 
 	return Super::NativeOnMouseButtonDoubleClick(InGeometry, InMouseEvent);
+}
+
+FReply UEquipmentSlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	if (InMouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && bHasItem)
+	{
+		return UWidgetBlueprintLibrary::DetectDragIfPressed(InMouseEvent, this, EKeys::LeftMouseButton).NativeReply;
+	}
+
+	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
+}
+
+void UEquipmentSlotWidget::NativeOnDragDetected(
+	const FGeometry& InGeometry,
+	const FPointerEvent& InMouseEvent,
+	UDragDropOperation*& OutOperation)
+{
+	if (!bHasItem)
+	{
+		OutOperation = nullptr;
+		return;
+	}
+
+	UItemDragDropOperation* Op = NewObject<UItemDragDropOperation>();
+	Op->SourceType = EItemDragSource::Equipment;
+	Op->ItemRow    = CurrentItemRow;
+
+	// Размер для возврата в инвентарь — лучше как в инвентаре (rules)
+	Op->SizeInCells = CurrentItemRow.GridSize;
+	Op->Quantity    = 1;
+	Op->FromSlot    = SlotType;
+
+	if (Op->SizeInCells.Width <= 0 || Op->SizeInCells.Height <= 0)
+	{
+		Op->SizeInCells = UItemSizeRules::GetDefaultSize(CurrentItemRow.ItemClass);
+	}
+
+	// Drag visual
+	UEquipmentSlotWidget* DragVisual = CreateWidget<UEquipmentSlotWidget>(GetWorld(), GetClass());
+	if (DragVisual)
+	{
+		DragVisual->SetItem(CurrentItemRow);
+		DragVisual->SetRenderOpacity(0.85f);
+		Op->DefaultDragVisual = DragVisual;
+		Op->Pivot = EDragPivot::MouseDown;
+	}
+
+	OutOperation = Op;
+}
+
+bool UEquipmentSlotWidget::NativeOnDrop(
+	const FGeometry& InGeometry,
+	const FDragDropEvent& InDragDropEvent,
+	UDragDropOperation* InOperation)
+{
+	const UItemDragDropOperation* Op = Cast<UItemDragDropOperation>(InOperation);
+	if (!Op)
+		return false;
+
+	AARESMMOCharacter* Char = Cast<AARESMMOCharacter>(GetOwningPlayerPawn());
+	if (!Char)
+		return false;
+
+	// Инвентарь -> Экипировка
+	if (Op->SourceType == EItemDragSource::Inventory)
+	{
+		return Char->EquipInventoryItemToSlot(Op->ItemRow.InternalName, Op->FromCellX, Op->FromCellY, SlotType);
+	}
+
+	// Экипировка -> Экипировка (не обязательно, пока игнорим)
+	return (Op->SourceType == EItemDragSource::Equipment && Op->FromSlot == SlotType);
 }

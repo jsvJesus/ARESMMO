@@ -1,10 +1,11 @@
 #include "ARESMMOCharacter.h"
-
 #include "Engine/LocalPlayer.h"
+#include "Engine/World.h"
 #include "Camera/CameraComponent.h"
 #include "UI/Game/GameHUDWidget.h"
 #include "UI/Game/Inventory/InventoryWidget.h"
 #include "UI/Game/Inventory/InventoryLayoutWidget.h"
+#include "UI/Game/Inventory/InventoryPreviewCaptureActor.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/SpringArmComponent.h"
 #include "GameFramework/Controller.h"
@@ -19,6 +20,7 @@
 #include "Items/ItemData.h"
 #include "Items/ItemSizeRules.h"
 #include "Items/ItemTypes.h"
+#include "Weapons/WeaponBase.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);
 
@@ -75,6 +77,110 @@ static EEquipmentSlotType GetHeroPartSlot(EHeroPartType HeroPartType)
 	case EHeroPartType::Legs: return EEquipmentSlotType::EquipmentSlotLegs;
 	default:                  return EEquipmentSlotType::None;
 	}
+}
+
+// ======================= INVENTORY HELPERS (Drag&Drop) =======================
+static bool RectOverlapCells(
+	int32 AX, int32 AY, const FItemSize& ASz,
+	int32 BX, int32 BY, const FItemSize& BSz)
+{
+	const int32 AL = AX;
+	const int32 AT = AY;
+	const int32 AR = AX + ASz.Width  - 1;
+	const int32 AB = AY + ASz.Height - 1;
+
+	const int32 BL = BX;
+	const int32 BT = BY;
+	const int32 BR = BX + BSz.Width  - 1;
+	const int32 BB = BY + BSz.Height - 1;
+
+	return !(AR < BL || AL > BR || AB < BT || AT > BB);
+}
+
+static bool CanPlaceInInventory(
+	const TArray<FInventoryItemEntry>& Items,
+	int32 InvW, int32 InvH,
+	const FItemSize& Size,
+	int32 CellX, int32 CellY,
+	int32 IgnoreIndex)
+{
+	if (Size.Width <= 0 || Size.Height <= 0)
+		return false;
+
+	if (CellX < 0 || CellY < 0)
+		return false;
+
+	if (CellX + Size.Width > InvW)
+		return false;
+
+	if (CellY + Size.Height > InvH)
+		return false;
+
+	for (int32 i = 0; i < Items.Num(); ++i)
+	{
+		if (i == IgnoreIndex)
+			continue;
+
+		const FInventoryItemEntry& E = Items[i];
+		if (RectOverlapCells(CellX, CellY, Size, E.CellX, E.CellY, E.SizeInCells))
+			return false;
+	}
+
+	return true;
+}
+
+static bool IsWeaponSlotType(EEquipmentSlotType Slot)
+{
+	return Slot == EEquipmentSlotType::EquipmentSlotWeapon1 || Slot == EEquipmentSlotType::EquipmentSlotWeapon2;
+}
+
+static bool IsDeviceSlotType(EEquipmentSlotType Slot)
+{
+	return Slot == EEquipmentSlotType::EquipmentSlotDevice1 || Slot == EEquipmentSlotType::EquipmentSlotDevice2;
+}
+
+static bool IsWeaponAffectingSlot(EEquipmentSlotType Slot)
+{
+	return Slot == EEquipmentSlotType::EquipmentSlotWeapon1 ||
+		   Slot == EEquipmentSlotType::EquipmentSlotWeapon2 ||
+		   Slot == EEquipmentSlotType::EquipmentSlotPistol ||
+		   Slot == EEquipmentSlotType::EquipmentSlotKnife;
+}
+
+// ===== ContextMenu helpers =====
+static int32 FindInventoryIndexForAction(const TArray<FInventoryItemEntry>& Items, FName InternalName, int32 CellX, int32 CellY)
+{
+	int32 Idx = Items.IndexOfByPredicate([&](const FInventoryItemEntry& E)
+	{
+		return E.ItemRow.InternalName == InternalName && E.CellX == CellX && E.CellY == CellY;
+	});
+
+	if (Idx != INDEX_NONE)
+	{
+		return Idx;
+	}
+
+	// fallback: только по InternalName (если вкладки уплотняются/координаты не те)
+	return Items.IndexOfByPredicate([&](const FInventoryItemEntry& E)
+	{
+		return E.ItemRow.InternalName == InternalName;
+	});
+}
+
+static int32 FindBySubCategory(const TArray<FInventoryItemEntry>& Items, EStoreSubCategory SubCat)
+{
+	return Items.IndexOfByPredicate([&](const FInventoryItemEntry& E)
+	{
+		return E.ItemRow.StoreSubCategory == SubCat;
+	});
+}
+
+static int32 FindAnyAmmoIndex(const TArray<FInventoryItemEntry>& Items)
+{
+	return Items.IndexOfByPredicate([&](const FInventoryItemEntry& E)
+	{
+		return E.ItemRow.StoreCategory == EStoreCategory::storecat_Ammo;
+	});
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -153,19 +259,6 @@ AARESMMOCharacter::AARESMMOCharacter()
 	Mesh_Backpack->SetupAttachment(GetMesh());
 	Mesh_Backpack->SetLeaderPoseComponent(GetMesh());
 
-	// ===== Weapon Visual Meshes =====
-	Mesh_Rifle = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Mesh_Rifle"));
-	Mesh_Rifle->SetupAttachment(GetMesh(), TEXT("Rifle_Socket"));
-	Mesh_Rifle->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	Mesh_Rifle->SetGenerateOverlapEvents(false);
-	Mesh_Rifle->SetVisibility(false, true);
-
-	Mesh_Pistol = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Mesh_Pistol"));
-	Mesh_Pistol->SetupAttachment(GetMesh(), TEXT("Pistol_Socket"));
-	Mesh_Pistol->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-	Mesh_Pistol->SetGenerateOverlapEvents(false);
-	Mesh_Pistol->SetVisibility(false, true);
-
 	// Create a FPS Camera
 	FPSCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FPSCamera"));
 	FPSCamera->SetupAttachment(GetMesh(), TEXT("head")); // имя сокета головы своё
@@ -206,7 +299,7 @@ AARESMMOCharacter::AARESMMOCharacter()
 void AARESMMOCharacter::BeginPlay()
 {
 	Super::BeginPlay();
-	
+
 	// Сохраняем дефолтные настройки TPS камеры
 	if (CameraBoom)
 	{
@@ -227,8 +320,6 @@ void AARESMMOCharacter::BeginPlay()
 			if (GameHUDWidgetInstance)
 			{
 				GameHUDWidgetInstance->AddToViewport();
-
-				// Прокидываем в виджет нашего Pawn, чтобы он нашёл UPlayerStatsComponent
 				GameHUDWidgetInstance->InitFromPawn(this);
 			}
 		}
@@ -248,35 +339,41 @@ void AARESMMOCharacter::BeginPlay()
 		DefaultLegsMesh = Mesh_Legs->GetSkeletalMeshAsset();
 	}
 
-	if (InventoryRenderTarget)
+	// =====================================================================
+	// Inventory Preview Capture (ОТДЕЛЬНЫЙ актёр, чтобы FPS-скрытие не влияло)
+	// =====================================================================
+	if (IsLocallyControlled() && InventoryRenderTarget)
 	{
-		InventoryCapture->TextureTarget = InventoryRenderTarget;
+		// Спавним актёр превью (SceneCapture живёт НЕ на персонаже)
+		if (!InventoryPreviewActor)
+		{
+			FActorSpawnParameters Params;
+			Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+			Params.Owner = this;
 
-		// Очищаем и добавляем только нужные компоненты
-		InventoryCapture->ShowOnlyComponents.Empty();
+			InventoryPreviewActor = GetWorld()->SpawnActor<AInventoryPreviewCaptureActor>(
+				AInventoryPreviewCaptureActor::StaticClass(),
+				FTransform::Identity,
+				Params
+			);
 
-		InventoryCapture->ShowOnlyComponents.Add(GetMesh());
-		InventoryCapture->ShowOnlyComponents.Add(Mesh_Head);
-		InventoryCapture->ShowOnlyComponents.Add(Mesh_Body);
-		InventoryCapture->ShowOnlyComponents.Add(Mesh_Legs);
-		InventoryCapture->ShowOnlyComponents.Add(Mesh_Armor);
-		InventoryCapture->ShowOnlyComponents.Add(Mesh_Helmet);
-		InventoryCapture->ShowOnlyComponents.Add(Mesh_Mask);
-		InventoryCapture->ShowOnlyComponents.Add(Mesh_Backpack);
+			if (InventoryPreviewActor)
+			{
+				InventoryPreviewActor->Init(this, InventoryRenderTarget);
+			}
+		}
 
-		// ===== Weapon Visual Meshes =====
-		InventoryCapture->ShowOnlyComponents.Add(Mesh_Rifle);
-		InventoryCapture->ShowOnlyComponents.Add(Mesh_Pistol);
+		// Старый InventoryCapture на персонаже выключаем, чтобы не было двойного захвата
+		if (InventoryCapture)
+		{
+			InventoryCapture->bCaptureEveryFrame = false;
+			InventoryCapture->TextureTarget = nullptr;
+		}
 	}
 
-	if (InventoryCapture && InventoryRenderTarget)
-	{
-		InventoryCapture->TextureTarget     = InventoryRenderTarget;
-		InventoryCapture->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
-
-		// Полный аналог узла Show Only Actor Components (Self)
-		InventoryCapture->ShowOnlyActorComponents(this, true); // true = брать компоненты детей
-	}
+	// Собираем ShowOnly (и оружие тоже) уже через UpdateInventoryPreviewShowOnly()
+	UpdateInventoryPreviewShowOnly();
+	SetSelectedWeaponInternal(GetBestWeaponForAttachment());
 }
 
 void AARESMMOCharacter::Tick(float DeltaSeconds)
@@ -449,6 +546,12 @@ void AARESMMOCharacter::Crouching(const FInputActionValue& Value)
 	}
 }
 
+void AARESMMOCharacter::SelectWeaponSlot(EEquipmentSlotType SlotType)
+{
+	AWeaponBase* W = GetWeaponActorInSlot(SlotType);
+	SetSelectedWeaponInternal(W);
+}
+
 void AARESMMOCharacter::EquipHeroPart(const FItemBaseRow& ItemRow)
 {
 	if (ItemRow.HeroPartType == EHeroPartType::None)
@@ -541,108 +644,82 @@ void AARESMMOCharacter::EquipEquipment(const FItemBaseRow& ItemRow)
 
 void AARESMMOCharacter::EquipItem(const FItemBaseRow& ItemRow)
 {
-    const bool bIsHeroPart =
-        (ItemRow.StoreCategory == EStoreCategory::storecat_HeroParts);
+	const bool bIsHeroPart =
+		(ItemRow.StoreCategory == EStoreCategory::storecat_HeroParts);
 
-    const bool bIsGear =
-        (ItemRow.StoreCategory == EStoreCategory::storecat_Armor  ||
-         ItemRow.StoreCategory == EStoreCategory::storecat_Helmet ||
-         ItemRow.StoreCategory == EStoreCategory::storecat_Mask   ||
-         ItemRow.StoreCategory == EStoreCategory::storecat_Backpack);
+	const bool bIsGear =
+		(ItemRow.StoreCategory == EStoreCategory::storecat_Armor  ||
+		 ItemRow.StoreCategory == EStoreCategory::storecat_Helmet ||
+		 ItemRow.StoreCategory == EStoreCategory::storecat_Mask   ||
+		 ItemRow.StoreCategory == EStoreCategory::storecat_Backpack);
 
-    // 1) Визуал на персонаже
-    if (bIsHeroPart)
-    {
-        // голова/тело/ноги
-        EquipHeroPart(ItemRow);
-    }
-    else if (bIsGear)
-    {
-        // броня/шлем/маска/рюкзак
-        EquipEquipment(ItemRow);
-    }
-    else
-    {
-        // оружие/девайсы → меняем WeaponState
-        const EWeaponState NewState = GetWeaponStateForCategory(ItemRow.StoreCategory);
-        if (NewState != EWeaponState::Unarmed)
-        {
-            SetWeaponState(NewState);
-        }
-        else
-        {
-            UE_LOG(LogTemp, Warning, TEXT("EquipItem: Category %d does not change weapon state"),
-                static_cast<int32>(ItemRow.StoreCategory));
-        }
-    }
-
-    // Заполняем EquipmentSlots ДЛЯ ВСЕХ типов, чтобы UI видел предмет
-    EEquipmentSlotType Slot = ItemRow.EquipmentSlot;
-
-    // если в DT не задан конкретный слот — берём по категории
-    if (Slot == EEquipmentSlotType::None)
-    {
-        Slot = GetEquipmentSlotForCategory(ItemRow.StoreCategory);
-
-        // Особый случай: HeroParts (голова/туловище/ноги)
-        if (Slot == EEquipmentSlotType::None && bIsHeroPart)
-        {
-            switch (ItemRow.HeroPartType)
-            {
-            case EHeroPartType::Head:
-                Slot = EEquipmentSlotType::EquipmentSlotHead;
-                break;
-            case EHeroPartType::Body:
-                Slot = EEquipmentSlotType::EquipmentSlotBody;
-                break;
-            case EHeroPartType::Legs:
-                Slot = EEquipmentSlotType::EquipmentSlotLegs;
-                break;
-            default:
-                break;
-            }
-        }
-    }
-
-    // ResolveAutoSlot — чтобы, например, Armor ушёл в Armor, Weapon1/2 и т.д.
-    Slot = ResolveAutoSlot(Slot, EquipmentSlots);
-
-    if (Slot != EEquipmentSlotType::None)
-    {
-        EquipmentSlots.FindOrAdd(Slot) = ItemRow;
-
-        // обновляем панель экипировки
-        if (InventoryLayoutWidgetInstance)
-        {
-            InventoryLayoutWidgetInstance->SetEquipment(EquipmentSlots);
-        }
-    }
-
-	static const FName Bone_WeaponR(TEXT("weapon_r"));
-	static const FName Socket_Rifle(TEXT("Rifle_Socket"));
-	static const FName Socket_Pistol(TEXT("Pistol_Socket"));
-
-	if (Slot == EEquipmentSlotType::EquipmentSlotPistol)
+	// Визуал на персонаже (HeroParts/Gear) + WeaponState
+	if (bIsHeroPart)
 	{
-		if (Mesh_Pistol)
+		EquipHeroPart(ItemRow);
+	}
+	else if (bIsGear)
+	{
+		EquipEquipment(ItemRow);
+	}
+	else
+	{
+		// оружие/девайсы → меняем WeaponState
+		const EWeaponState NewState = GetWeaponStateForCategory(ItemRow.StoreCategory);
+		if (NewState != EWeaponState::Unarmed)
 		{
-			Mesh_Pistol->SetSkeletalMesh(ItemRow.HeroPartMesh);
-			Mesh_Pistol->SetVisibility(ItemRow.HeroPartMesh != nullptr, true);
-
-			const FName AttachName = GetMesh()->DoesSocketExist(Socket_Pistol) ? Socket_Pistol : Bone_WeaponR;
-			Mesh_Pistol->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachName);
+			SetWeaponState(NewState);
+		}
+		else
+		{
+			UE_LOG(LogTemp, Warning, TEXT("EquipItem: Category %d does not change weapon state"),
+				static_cast<int32>(ItemRow.StoreCategory));
 		}
 	}
-	else if (Slot == EEquipmentSlotType::EquipmentSlotWeapon1 || Slot == EEquipmentSlotType::EquipmentSlotWeapon2)
-	{
-		if (Mesh_Rifle)
-		{
-			Mesh_Rifle->SetSkeletalMesh(ItemRow.HeroPartMesh);
-			Mesh_Rifle->SetVisibility(ItemRow.HeroPartMesh != nullptr, true);
 
-			const FName AttachName = GetMesh()->DoesSocketExist(Socket_Rifle) ? Socket_Rifle : Bone_WeaponR;
-			Mesh_Rifle->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachName);
+	// Определяем слот экипировки, чтобы UI видел предмет
+	EEquipmentSlotType Slot = ItemRow.EquipmentSlot;
+
+	if (Slot == EEquipmentSlotType::None)
+	{
+		Slot = GetEquipmentSlotForCategory(ItemRow.StoreCategory);
+
+		// Особый случай: HeroParts (голова/туловище/ноги)
+		if (Slot == EEquipmentSlotType::None && bIsHeroPart)
+		{
+			switch (ItemRow.HeroPartType)
+			{
+			case EHeroPartType::Head: Slot = EEquipmentSlotType::EquipmentSlotHead; break;
+			case EHeroPartType::Body: Slot = EEquipmentSlotType::EquipmentSlotBody; break;
+			case EHeroPartType::Legs: Slot = EEquipmentSlotType::EquipmentSlotLegs; break;
+			default: break;
+			}
 		}
+	}
+
+	// ResolveAutoSlot — чтобы, например, Armor ушёл в Armor, Weapon1/2 и т.д.
+	Slot = ResolveAutoSlot(Slot, EquipmentSlots);
+
+	if (Slot != EEquipmentSlotType::None)
+	{
+		EquipmentSlots.FindOrAdd(Slot) = ItemRow;
+
+		// обновляем панель экипировки
+		if (InventoryLayoutWidgetInstance)
+		{
+			InventoryLayoutWidgetInstance->SetEquipment(EquipmentSlots);
+		}
+	}
+	
+	const bool bIsWeaponSlot =
+		(Slot == EEquipmentSlotType::EquipmentSlotPistol ||
+		 Slot == EEquipmentSlotType::EquipmentSlotWeapon1 ||
+		 Slot == EEquipmentSlotType::EquipmentSlotWeapon2);
+
+	if (bIsWeaponSlot)
+	{
+		// Спавн/Attach Actor оружия (BP_Weapon_* должен быть наследником AWeaponBase)
+		EquipWeaponActorToSlot(ItemRow, Slot);
 	}
 }
 
@@ -679,7 +756,7 @@ bool AARESMMOCharacter::EquipItemFromInventory(const FItemBaseRow& ItemRow)
 	return true;
 }
 
-bool AARESMMOCharacter::UnequipSlot(EEquipmentSlotType SlotType, int32 TargetCellX, int32 TargetCellY)
+bool AARESMMOCharacter::UnequipSlot(EEquipmentSlotType SlotType)
 {
 	FItemBaseRow RemovedItem;
 
@@ -694,65 +771,53 @@ bool AARESMMOCharacter::UnequipSlot(EEquipmentSlotType SlotType, int32 TargetCel
 		return false;
 	}
 
-	// Сбрасываем визуальные меши, если нужно
+	// Сбрасываем визуал, если нужно
 	switch (SlotType)
 	{
 	case EEquipmentSlotType::EquipmentSlotHelmet:
 		if (Mesh_Helmet)   Mesh_Helmet->SetSkeletalMesh(nullptr);
 		break;
+
 	case EEquipmentSlotType::EquipmentSlotArmor:
 		if (Mesh_Armor)    Mesh_Armor->SetSkeletalMesh(nullptr);
 		break;
+
 	case EEquipmentSlotType::EquipmentSlotMask:
 		if (Mesh_Mask)     Mesh_Mask->SetSkeletalMesh(nullptr);
 		break;
+
 	case EEquipmentSlotType::EquipmentSlotBackpack:
 		if (Mesh_Backpack) Mesh_Backpack->SetSkeletalMesh(nullptr);
 		break;
 
 	case EEquipmentSlotType::EquipmentSlotHead:
-		if (Mesh_Head)
-		{
-			Mesh_Head->SetSkeletalMesh(DefaultHeadMesh);
-		}
+		if (Mesh_Head) Mesh_Head->SetSkeletalMesh(DefaultHeadMesh);
 		break;
 
 	case EEquipmentSlotType::EquipmentSlotBody:
-		if (Mesh_Body)
-		{
-			Mesh_Body->SetSkeletalMesh(DefaultBodyMesh);
-		}
+		if (Mesh_Body) Mesh_Body->SetSkeletalMesh(DefaultBodyMesh);
 		break;
 
 	case EEquipmentSlotType::EquipmentSlotLegs:
-		if (Mesh_Legs)
-		{
-			Mesh_Legs->SetSkeletalMesh(DefaultLegsMesh);
-		}
+		if (Mesh_Legs) Mesh_Legs->SetSkeletalMesh(DefaultLegsMesh);
 		break;
-
+	
 	case EEquipmentSlotType::EquipmentSlotPistol:
-		if (Mesh_Pistol)
-		{
-			Mesh_Pistol->SetSkeletalMesh(nullptr);
-			Mesh_Pistol->SetVisibility(false, true);
-		}
-		break;
-
+	{
+		DestroyWeaponActorInSlot(EEquipmentSlotType::EquipmentSlotPistol);
+	}
+	
 	case EEquipmentSlotType::EquipmentSlotWeapon1:
 	case EEquipmentSlotType::EquipmentSlotWeapon2:
-		if (Mesh_Rifle)
-		{
-			Mesh_Rifle->SetSkeletalMesh(nullptr);
-			Mesh_Rifle->SetVisibility(false, true);
-		}
-		break;
+	{
+		DestroyWeaponActorInSlot(SlotType);
+	}
 
 	default:
 		break;
 	}
 
-	// Вернуть в исходную стойку после снятия Weapon1/Weapon2/Pistol/Knife
+	// Вернуть стойку после снятия Weapon1/Weapon2/Pistol/Knife
 	if (SlotType == EEquipmentSlotType::EquipmentSlotPistol ||
 		SlotType == EEquipmentSlotType::EquipmentSlotWeapon1 ||
 		SlotType == EEquipmentSlotType::EquipmentSlotWeapon2 ||
@@ -762,33 +827,54 @@ bool AARESMMOCharacter::UnequipSlot(EEquipmentSlotType SlotType, int32 TargetCel
 	}
 
 	// Пытаемся вернуть предмет в инвентарь
-	bool bAdded = false;
-
-	if (TargetCellX != INDEX_NONE && TargetCellY != INDEX_NONE)
-	{
-		bAdded = AddItemToInventoryAt(RemovedItem, TargetCellX, TargetCellY);
-	}
-
+	const bool bAdded = AddItemToInventory(RemovedItem, 1);
 	if (!bAdded)
 	{
-		bAdded = AddItemToInventory(RemovedItem, 1);
-	}
-
-	if (!bAdded)
-	{
+		// нет места — откатываем (чтоб не терять предмет)
 		EquipmentSlots.Add(SlotType, RemovedItem);
-		EquipItem(RemovedItem);
 
+		// ВАЖНО: откатываем визуал БЕЗ EquipItem() (чтобы не уехал слот через ResolveAutoSlot)
+		const bool bIsHeroPart = (RemovedItem.StoreCategory == EStoreCategory::storecat_HeroParts);
+		const bool bIsGear =
+			(RemovedItem.StoreCategory == EStoreCategory::storecat_Armor  ||
+			 RemovedItem.StoreCategory == EStoreCategory::storecat_Helmet ||
+			 RemovedItem.StoreCategory == EStoreCategory::storecat_Mask   ||
+			 RemovedItem.StoreCategory == EStoreCategory::storecat_Backpack);
+
+		if (bIsHeroPart)
+		{
+			EquipHeroPart(RemovedItem);
+		}
+		else if (bIsGear)
+		{
+			EquipEquipment(RemovedItem);
+		}
+		else
+		{
+			// если это оружейный слот — восстанавливаем actor-оружие
+			if (SlotType == EEquipmentSlotType::EquipmentSlotPistol ||
+				SlotType == EEquipmentSlotType::EquipmentSlotWeapon1 ||
+				SlotType == EEquipmentSlotType::EquipmentSlotWeapon2)
+			{
+				EquipWeaponActorToSlot(RemovedItem, SlotType);
+			}
+		}
+
+		RecalculateWeaponStateFromEquipment();
+
+		UE_LOG(LogTemp, Warning, TEXT("UnequipSlot: no space in inventory for %s, reverting"),
+			*RemovedItem.InternalName.ToString());
+
+		// UI
 		if (InventoryLayoutWidgetInstance)
 		{
 			InventoryLayoutWidgetInstance->SetEquipment(EquipmentSlots);
 		}
 
-		UE_LOG(LogTemp, Warning, TEXT("UnequipSlot: no space in inventory for %s, reverting"),
-			*RemovedItem.InternalName.ToString());
 		return false;
 	}
-	
+
+	// UI
 	if (InventoryLayoutWidgetInstance)
 	{
 		InventoryLayoutWidgetInstance->SetEquipment(EquipmentSlots);
@@ -878,35 +964,7 @@ void AARESMMOCharacter::SetWeaponState(EWeaponState NewState)
 
 EWeaponState AARESMMOCharacter::GetWeaponStateForCategory(EStoreCategory Category)
 {
-	switch (Category)
-	{
-	case EStoreCategory::storecat_ASR:
-	case EStoreCategory::storecat_SNP:
-	case EStoreCategory::storecat_MG:
-		return EWeaponState::Rifle;
-
-	case EStoreCategory::storecat_SHTG:
-		return EWeaponState::Shotgun;
-
-	case EStoreCategory::storecat_HG:
-	case EStoreCategory::storecat_SMG:
-		return EWeaponState::Pistol;
-
-	case EStoreCategory::storecat_MELEE:
-		return EWeaponState::Melee;
-
-	case EStoreCategory::storecat_Grenade:
-		return EWeaponState::Grenade;
-
-	case EStoreCategory::storecat_PlaceItem:
-		return EWeaponState::PlaceItem;
-
-	case EStoreCategory::storecat_UsableItem:
-		return EWeaponState::UsableItem;
-
-	default:
-		return EWeaponState::Unarmed;
-	}
+	return ::GetWeaponStateForCategory(Category);
 }
 
 void AARESMMOCharacter::StartSprint()
@@ -965,7 +1023,7 @@ void AARESMMOCharacter::SwitchToFPS()
 
 	// --- Вращение для FPS ---
 	// В FPS UseControllerRotationYaw выключен
-	bUseControllerRotationYaw = false;
+	bUseControllerRotationYaw = true;
 
 	if (UCharacterMovementComponent* Move = GetCharacterMovement())
 	{
@@ -974,9 +1032,22 @@ void AARESMMOCharacter::SwitchToFPS()
 	}
 
 	// --- Скрываем шмотку на голове в FPS ---
-	//if (Mesh_Head)   Mesh_Head->SetVisibility(false, true);
-	if (Mesh_Helmet) Mesh_Helmet->SetVisibility(false, true);
-	if (Mesh_Mask)   Mesh_Mask->SetVisibility(false, true);
+	auto HideForOwner = [](USkeletalMeshComponent* Comp, bool bHide)
+	{
+		if (!Comp) return;
+
+		// компонент должен быть ВИДИМ глобально (для превью/других игроков)
+		Comp->SetVisibility(true, true);
+
+		// но скрыт только для владельца камеры
+		Comp->SetOwnerNoSee(bHide);
+		Comp->SetOnlyOwnerSee(false);
+	};
+
+	// --- Скрываем шмотку на голове только для камеры владельца (FPS) ---
+	//HideForOwner(Mesh_Head, true);
+	HideForOwner(Mesh_Helmet, true);
+	HideForOwner(Mesh_Mask, true);
 }
 
 void AARESMMOCharacter::SwitchToTPS()
@@ -1005,9 +1076,22 @@ void AARESMMOCharacter::SwitchToTPS()
 	TPSCamera->SetActive(true);
 
 	// --- Отображаем шмотку на голове в TPS ---
-	//if (Mesh_Head)   Mesh_Head->SetVisibility(false, true);
-	if (Mesh_Helmet) Mesh_Helmet->SetVisibility(true, true);
-	if (Mesh_Mask)   Mesh_Mask->SetVisibility(true, true);
+	auto HideForOwner = [](USkeletalMeshComponent* Comp, bool bHide)
+	{
+		if (!Comp) return;
+
+		// компонент должен быть ВИДИМ глобально (для превью/других игроков)
+		Comp->SetVisibility(true, true);
+
+		// но скрыт только для владельца камеры
+		Comp->SetOwnerNoSee(bHide);
+		Comp->SetOnlyOwnerSee(false);
+	};
+
+	// --- Возвращаем видимость для владельца (TPS) ---
+	//HideForOwner(Mesh_Head, false);
+	HideForOwner(Mesh_Helmet, false);
+	HideForOwner(Mesh_Mask, false);
 }
 
 void AARESMMOCharacter::ToggleCameraMode()
@@ -1132,6 +1216,171 @@ void AARESMMOCharacter::RecalculateWeaponStateFromEquipment()
 	SetWeaponState(EWeaponState::Unarmed);
 }
 
+AWeaponBase* AARESMMOCharacter::GetWeaponActorInSlot(EEquipmentSlotType SlotType) const
+{
+	switch (SlotType)
+	{
+		case EEquipmentSlotType::EquipmentSlotWeapon1: return WeaponActor_Weapon1;
+		case EEquipmentSlotType::EquipmentSlotWeapon2: return WeaponActor_Weapon2;
+		case EEquipmentSlotType::EquipmentSlotPistol:  return WeaponActor_Pistol;
+
+		default: return nullptr;
+	}
+}
+
+void AARESMMOCharacter::SetWeaponActorInSlot(EEquipmentSlotType SlotType, AWeaponBase* Weapon)
+{
+	switch (SlotType)
+	{
+		case EEquipmentSlotType::EquipmentSlotWeapon1: WeaponActor_Weapon1 = Weapon; break;
+		case EEquipmentSlotType::EquipmentSlotWeapon2: WeaponActor_Weapon2 = Weapon; break;
+		case EEquipmentSlotType::EquipmentSlotPistol:  WeaponActor_Pistol  = Weapon; break;
+
+		default: break;
+	}
+}
+
+bool AARESMMOCharacter::EquipWeaponActorToSlot(const FItemBaseRow& ItemRow, EEquipmentSlotType SlotType)
+{
+	if (!GetWorld() || !GetMesh())
+		return false;
+
+	// Если в DT не задан класс — это не actor-оружие
+	if (ItemRow.WeaponActorClass.IsNull())
+	{
+		UE_LOG(LogTemp, Warning, TEXT("EquipWeaponActorToSlot: WeaponActorClass is null for %s"), *ItemRow.InternalName.ToString());
+		return false;
+	}
+
+	// Сносим старое оружие в слоте
+	DestroyWeaponActorInSlot(SlotType);
+
+	UClass* WeaponCls = ItemRow.WeaponActorClass.LoadSynchronous();
+	if (!WeaponCls)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("EquipWeaponActorToSlot: failed to load class for %s"), *ItemRow.InternalName.ToString());
+		return false;
+	}
+
+	FActorSpawnParameters SP;
+	SP.Owner = this;
+	SP.Instigator = this;
+	SP.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+
+	AWeaponBase* NewWeapon = GetWorld()->SpawnActor<AWeaponBase>(WeaponCls, FTransform::Identity, SP);
+	if (!NewWeapon)
+		return false;
+
+	NewWeapon->SetOwningCharacter(this);
+
+	const FName AttachName = ResolveWeaponAttachName(SlotType, ItemRow);
+	NewWeapon->AttachToComponent(GetMesh(), FAttachmentTransformRules::SnapToTargetNotIncludingScale, AttachName);
+
+	SetWeaponActorInSlot(SlotType, NewWeapon);
+
+	// Если активное оружие ещё не выбрано — выбираем первое появившееся
+	if (!SelectedWeapon && NewWeapon)
+	{
+		SetSelectedWeaponInternal(NewWeapon);
+	}
+
+	UpdateInventoryPreviewShowOnly();
+	return true;
+}
+
+void AARESMMOCharacter::DestroyWeaponActorInSlot(EEquipmentSlotType SlotType)
+{
+	if (AWeaponBase* W = GetWeaponActorInSlot(SlotType))
+	{
+		const bool bWasSelected = (SelectedWeapon == W);
+
+		W->Destroy();
+		SetWeaponActorInSlot(SlotType, nullptr);
+
+		if (bWasSelected)
+		{
+			SetSelectedWeaponInternal(GetBestWeaponForAttachment()); // Weapon1->Weapon2->Pistol или nullptr
+		}
+	}
+
+	UpdateInventoryPreviewShowOnly();
+}
+
+FName AARESMMOCharacter::ResolveWeaponAttachName(EEquipmentSlotType SlotType, const FItemBaseRow& ItemRow) const
+{
+	// Override из DT
+	if (!ItemRow.WeaponEquipSocketName.IsNone())
+	{
+		return ItemRow.WeaponEquipSocketName;
+	}
+
+	// По слоту
+	static const FName Socket_Rifle(TEXT("Rifle_Socket"));
+	static const FName Socket_Pistol(TEXT("Pistol_Socket"));
+	static const FName Bone_WeaponR(TEXT("weapon_r"));
+
+	FName Wanted = Bone_WeaponR;
+
+	if (SlotType == EEquipmentSlotType::EquipmentSlotPistol)
+		Wanted = Socket_Pistol;
+	else if (SlotType == EEquipmentSlotType::EquipmentSlotWeapon1 || SlotType == EEquipmentSlotType::EquipmentSlotWeapon2)
+		Wanted = Socket_Rifle;
+
+	// Fallback если сокета нет
+	return GetMesh()->DoesSocketExist(Wanted) ? Wanted : Bone_WeaponR;
+}
+
+void AARESMMOCharacter::UpdateInventoryPreviewShowOnly()
+{
+	if (!InventoryRenderTarget)
+	{
+		return;
+	}
+
+	USceneCaptureComponent2D* Capture = nullptr;
+
+	if (InventoryPreviewActor && InventoryPreviewActor->GetCaptureComponent())
+	{
+		Capture = InventoryPreviewActor->GetCaptureComponent();
+	}
+	else
+	{
+		Capture = InventoryCapture; // fallback
+	}
+
+	if (!Capture)
+	{
+		return;
+	}
+
+	Capture->TextureTarget = InventoryRenderTarget;
+	Capture->PrimitiveRenderMode = ESceneCapturePrimitiveRenderMode::PRM_UseShowOnlyList;
+
+	Capture->ShowOnlyComponents.Reset();
+
+	// все компоненты персонажа
+	Capture->ShowOnlyActorComponents(this, true);
+
+	// добавляем все компоненты оружия (включая прицел/рукоятку и т.д.)
+	if (WeaponActor_Weapon1) InventoryCapture->ShowOnlyActorComponents(WeaponActor_Weapon1, true);
+	if (WeaponActor_Weapon2) InventoryCapture->ShowOnlyActorComponents(WeaponActor_Weapon2, true);
+	if (WeaponActor_Pistol)  InventoryCapture->ShowOnlyActorComponents(WeaponActor_Pistol,  true);
+}
+
+AWeaponBase* AARESMMOCharacter::GetBestWeaponForAttachment() const
+{
+	if (WeaponActor_Weapon1) return WeaponActor_Weapon1;
+	if (WeaponActor_Weapon2) return WeaponActor_Weapon2;
+	if (WeaponActor_Pistol)  return WeaponActor_Pistol;
+	return nullptr;
+}
+
+void AARESMMOCharacter::SetSelectedWeaponInternal(AWeaponBase* NewWeapon)
+{
+	SelectedWeapon = NewWeapon;
+	Hands_IK_Weight = (SelectedWeapon != nullptr) ? 1.0f : 0.0f;
+}
+
 void AARESMMOCharacter::AddInventoryPreviewYaw(float DeltaYaw)
 {
 	if (!InventoryPreviewPivot) return;
@@ -1139,94 +1388,6 @@ void AARESMMOCharacter::AddInventoryPreviewYaw(float DeltaYaw)
 	FRotator Rot = InventoryPreviewPivot->GetRelativeRotation();
 	Rot.Yaw += DeltaYaw * 0.5f;        // скорость вращения
 	InventoryPreviewPivot->SetRelativeRotation(Rot);
-}
-
-bool AARESMMOCharacter::MoveInventoryItem(const FItemBaseRow& ItemRow, int32 FromX, int32 FromY, int32 ToX, int32 ToY)
-{
-	const int32 Index = InventoryItems.IndexOfByPredicate([
-						&ItemRow, FromX, FromY](const FInventoryItemEntry& Entry)
-						{
-								return Entry.ItemRow.InternalName == ItemRow.InternalName &&
-										Entry.CellX == FromX && Entry.CellY == FromY;
-						});
-
-	if (Index == INDEX_NONE)
-	{
-		UE_LOG(LogTemp, Warning, TEXT("MoveInventoryItem: source item not found"));
-		return false;
-	}
-
-	FInventoryItemEntry& Entry = InventoryItems[Index];
-	const int32 PrevX = Entry.CellX;
-	const int32 PrevY = Entry.CellY;
-
-	Entry.CellX = ToX;
-	Entry.CellY = ToY;
-
-	if (!CanPlaceInventoryEntry(Entry, Index))
-	{
-		UE_LOG(LogTemp, Warning, TEXT("MoveInventoryItem: cannot place item to %d,%d"), ToX, ToY);
-		Entry.CellX = PrevX;
-		Entry.CellY = PrevY;
-		return false;
-	}
-
-	if (InventoryLayoutWidgetInstance)
-	{
-		InventoryLayoutWidgetInstance->DistributeItems(InventoryItems);
-		InventoryLayoutWidgetInstance->SetEquipment(EquipmentSlots);
-	}
-
-	return true;
-}
-
-bool AARESMMOCharacter::CanPlaceInventoryEntry(const FInventoryItemEntry& Entry, int32 IgnoreIndex) const
-{
-	if (InventoryWidthCells <= 0 || InventoryHeightCells <= 0)
-	{
-		return false;
-	}
-
-	const int32 ItemW = Entry.SizeInCells.Width;
-	const int32 ItemH = Entry.SizeInCells.Height;
-
-	if (ItemW <= 0 || ItemH <= 0)
-	{
-		return false;
-	}
-
-	// Проверка выхода за границы
-	if (Entry.CellX < 0 || Entry.CellY < 0 ||
-			Entry.CellX + ItemW > InventoryWidthCells ||
-			Entry.CellY + ItemH > InventoryHeightCells)
-	{
-		return false;
-	}
-
-	const int32 NewX2 = Entry.CellX + ItemW;
-	const int32 NewY2 = Entry.CellY + ItemH;
-
-	for (int32 Index = 0; Index < InventoryItems.Num(); ++Index)
-	{
-		if (Index == IgnoreIndex)
-		{
-			continue;
-		}
-
-		const FInventoryItemEntry& Other = InventoryItems[Index];
-		const int32 OtherX2 = Other.CellX + Other.SizeInCells.Width;
-		const int32 OtherY2 = Other.CellY + Other.SizeInCells.Height;
-
-		const bool bNoOverlap = (NewX2 <= Other.CellX || Entry.CellX >= OtherX2 ||
-				NewY2 <= Other.CellY || Entry.CellY >= OtherY2);
-
-		if (!bNoOverlap)
-		{
-			return false;
-		}
-	}
-
-	return true;
 }
 
 bool AARESMMOCharacter::AddItemToInventory(const FItemBaseRow& ItemRow, int32 StackCount)
@@ -1240,7 +1401,13 @@ bool AARESMMOCharacter::AddItemToInventory(const FItemBaseRow& ItemRow, int32 St
 
 	FInventoryItemEntry NewEntry;
 	NewEntry.ItemRow     = ItemRow;
-	NewEntry.SizeInCells = UItemSizeRules::GetDefaultSize(ItemRow.ItemClass);
+	NewEntry.SizeInCells = ItemRow.GridSize;
+
+	// fallback если вдруг в DataTable выставили 0x0
+	if (NewEntry.SizeInCells.Width <= 0 || NewEntry.SizeInCells.Height <= 0)
+	{
+		NewEntry.SizeInCells = UItemSizeRules::GetDefaultSize(ItemRow.ItemClass);
+	}
 
 	const int32 ItemW = NewEntry.SizeInCells.Width;
 	const int32 ItemH = NewEntry.SizeInCells.Height;
@@ -1334,31 +1501,7 @@ bool AARESMMOCharacter::AddItemToInventory(const FItemBaseRow& ItemRow, int32 St
 	return false;
 }
 
-bool AARESMMOCharacter::AddItemToInventoryAt(const FItemBaseRow& ItemRow, int32 CellX, int32 CellY)
-{
-	FInventoryItemEntry NewEntry;
-	NewEntry.ItemRow = ItemRow;
-	NewEntry.SizeInCells = UItemSizeRules::GetDefaultSize(ItemRow.ItemClass);
-	NewEntry.CellX = CellX;
-	NewEntry.CellY = CellY;
-
-	if (!CanPlaceInventoryEntry(NewEntry, INDEX_NONE))
-	{
-		return false;
-	}
-
-	InventoryItems.Add(NewEntry);
-
-	if (InventoryLayoutWidgetInstance)
-	{
-		InventoryLayoutWidgetInstance->DistributeItems(InventoryItems);
-		InventoryLayoutWidgetInstance->SetEquipment(EquipmentSlots);
-	}
-
-	return true;
-}
-
-void AARESMMOCharacter::PickupWorldItem(AWorldItemActor* WorldItem)
+void AARESMMOCharacter::PickupWorldItem(class AWorldItemActor* WorldItem)
 {
 	if (!WorldItem)
 	{
@@ -1385,4 +1528,558 @@ void AARESMMOCharacter::PickupWorldItem(AWorldItemActor* WorldItem)
 	{
 		WorldItem->Destroy();
 	}
+}
+
+void AARESMMOCharacter::RefreshInventoryUI()
+{
+	if (InventoryLayoutWidgetInstance)
+	{
+		InventoryLayoutWidgetInstance->DistributeItems(InventoryItems);
+		InventoryLayoutWidgetInstance->SetEquipment(EquipmentSlots);
+	}
+}
+
+bool AARESMMOCharacter::MoveInventoryItem(FName InternalName, int32 FromCellX, int32 FromCellY, int32 ToCellX,
+                                          int32 ToCellY)
+{
+	if (InventoryWidthCells <= 0 || InventoryHeightCells <= 0)
+		return false;
+
+	const int32 Index = InventoryItems.IndexOfByPredicate(
+		[&](const FInventoryItemEntry& E)
+		{
+			return E.CellX == FromCellX &&
+				   E.CellY == FromCellY &&
+				   E.ItemRow.InternalName == InternalName;
+		});
+
+	if (Index == INDEX_NONE)
+		return false;
+
+	FInventoryItemEntry& Entry = InventoryItems[Index];
+
+	const int32 MaxX = FMath::Max(0, InventoryWidthCells  - Entry.SizeInCells.Width);
+	const int32 MaxY = FMath::Max(0, InventoryHeightCells - Entry.SizeInCells.Height);
+
+	const int32 ClampedX = FMath::Clamp(ToCellX, 0, MaxX);
+	const int32 ClampedY = FMath::Clamp(ToCellY, 0, MaxY);
+
+	if (ClampedX == Entry.CellX && ClampedY == Entry.CellY)
+		return true;
+
+	if (!CanPlaceInInventory(InventoryItems, InventoryWidthCells, InventoryHeightCells, Entry.SizeInCells, ClampedX, ClampedY, Index))
+		return false;
+
+	Entry.CellX = ClampedX;
+	Entry.CellY = ClampedY;
+
+	if (InventoryLayoutWidgetInstance)
+	{
+		InventoryLayoutWidgetInstance->DistributeItems(InventoryItems);
+		InventoryLayoutWidgetInstance->SetEquipment(EquipmentSlots);
+	}
+
+	return true;
+}
+
+bool AARESMMOCharacter::EquipInventoryItemToSlot(FName InternalName, int32 FromCellX, int32 FromCellY,
+	EEquipmentSlotType TargetSlot)
+{
+	const int32 Index = InventoryItems.IndexOfByPredicate(
+		[&](const FInventoryItemEntry& E)
+		{
+			return E.CellX == FromCellX &&
+				   E.CellY == FromCellY &&
+				   E.ItemRow.InternalName == InternalName;
+		});
+
+	if (Index == INDEX_NONE)
+		return false;
+
+	const FInventoryItemEntry DraggedEntry = InventoryItems[Index];
+	const FItemBaseRow& ItemRow = DraggedEntry.ItemRow;
+
+	// Определяем “родной” слот предмета
+	EEquipmentSlotType BaseSlot = ItemRow.EquipmentSlot;
+	const bool bIsHeroPart = (ItemRow.StoreCategory == EStoreCategory::storecat_HeroParts);
+
+	if (BaseSlot == EEquipmentSlotType::None)
+	{
+		if (bIsHeroPart)
+		{
+			BaseSlot = GetHeroPartSlot(ItemRow.HeroPartType);
+		}
+		else
+		{
+			BaseSlot = GetEquipmentSlotForCategory(ItemRow.StoreCategory);
+		}
+	}
+
+	// Проверка совместимости со SlotType, на который дропнули
+	bool bCompatible = (BaseSlot == TargetSlot);
+
+	// Weapon1/Weapon2 — взаимозаменяемы
+	if (!bCompatible && IsWeaponSlotType(BaseSlot) && IsWeaponSlotType(TargetSlot))
+		bCompatible = true;
+
+	// Device1/Device2 — взаимозаменяемы
+	if (!bCompatible && IsDeviceSlotType(BaseSlot) && IsDeviceSlotType(TargetSlot))
+		bCompatible = true;
+
+	if (!bCompatible || TargetSlot == EEquipmentSlotType::None)
+		return false;
+
+	// Если слот занят — swap (старый эквип → на место dragged в инвентарь, если помещается)
+	if (const FItemBaseRow* OldEquipped = EquipmentSlots.Find(TargetSlot))
+	{
+		FInventoryItemEntry SwapCandidate;
+		SwapCandidate.ItemRow     = *OldEquipped;
+		SwapCandidate.CellX       = FromCellX;
+		SwapCandidate.CellY       = FromCellY;
+		SwapCandidate.Quantity    = OldEquipped->bUseStack ? 1 : 1;
+
+		SwapCandidate.SizeInCells = OldEquipped->GridSize;
+		if (SwapCandidate.SizeInCells.Width <= 0 || SwapCandidate.SizeInCells.Height <= 0)
+		{
+			SwapCandidate.SizeInCells = UItemSizeRules::GetDefaultSize(OldEquipped->ItemClass);
+		}
+
+		if (!CanPlaceInInventory(InventoryItems, InventoryWidthCells, InventoryHeightCells,
+			SwapCandidate.SizeInCells, SwapCandidate.CellX, SwapCandidate.CellY, Index))
+		{
+			return false;
+		}
+
+		// swap в инвентаре (не меняем длину массива)
+		InventoryItems[Index] = SwapCandidate;
+	}
+	else
+	{
+		// слот пуст — удаляем предмет из инвентаря
+		InventoryItems.RemoveAt(Index);
+	}
+
+	// Записываем в экипировку ИМЕННО в TargetSlot (без ResolveAutoSlot)
+	EquipmentSlots.FindOrAdd(TargetSlot) = ItemRow;
+
+	// Применяем визуал для HeroParts/Gear
+	const bool bIsGear =
+		(ItemRow.StoreCategory == EStoreCategory::storecat_Armor  ||
+		 ItemRow.StoreCategory == EStoreCategory::storecat_Helmet ||
+		 ItemRow.StoreCategory == EStoreCategory::storecat_Mask   ||
+		 ItemRow.StoreCategory == EStoreCategory::storecat_Backpack);
+
+	if (bIsHeroPart)
+	{
+		EquipHeroPart(ItemRow);
+	}
+	else if (bIsGear)
+	{
+		EquipEquipment(ItemRow);
+	}
+	else
+	{
+		// оружие/девайсы — стойку пересчитаем ниже
+	}
+	
+	if (TargetSlot == EEquipmentSlotType::EquipmentSlotPistol ||
+		TargetSlot == EEquipmentSlotType::EquipmentSlotWeapon1 ||
+		TargetSlot == EEquipmentSlotType::EquipmentSlotWeapon2)
+	{
+		EquipWeaponActorToSlot(ItemRow, TargetSlot);
+	}
+
+	// Пересчёт стойки (важно при Weapon/Pistol/Knife)
+	if (IsWeaponAffectingSlot(TargetSlot))
+	{
+		RecalculateWeaponStateFromEquipment();
+	}
+
+	// UI
+	if (InventoryLayoutWidgetInstance)
+	{
+		InventoryLayoutWidgetInstance->DistributeItems(InventoryItems);
+		InventoryLayoutWidgetInstance->SetEquipment(EquipmentSlots);
+	}
+
+	return true;
+}
+
+bool AARESMMOCharacter::UnequipSlotToInventoryAt(EEquipmentSlotType SlotType, int32 ToCellX, int32 ToCellY)
+{
+	FItemBaseRow* Found = EquipmentSlots.Find(SlotType);
+	if (!Found)
+		return false;
+
+	const FItemBaseRow RemovedItem = *Found;
+
+	FInventoryItemEntry Candidate;
+	Candidate.ItemRow  = RemovedItem;
+	Candidate.Quantity = RemovedItem.bUseStack ? 1 : 1;
+
+	// FIX: используем GridSize из ItemRow если он задан, иначе default по классу
+	Candidate.SizeInCells = RemovedItem.GridSize;
+	if (Candidate.SizeInCells.Width <= 0 || Candidate.SizeInCells.Height <= 0)
+	{
+		Candidate.SizeInCells = UItemSizeRules::GetDefaultSize(RemovedItem.ItemClass);
+	}
+
+	const int32 MaxX = FMath::Max(0, InventoryWidthCells  - Candidate.SizeInCells.Width);
+	const int32 MaxY = FMath::Max(0, InventoryHeightCells - Candidate.SizeInCells.Height);
+
+	Candidate.CellX = FMath::Clamp(ToCellX, 0, MaxX);
+	Candidate.CellY = FMath::Clamp(ToCellY, 0, MaxY);
+
+	if (!CanPlaceInInventory(InventoryItems, InventoryWidthCells, InventoryHeightCells,
+		Candidate.SizeInCells, Candidate.CellX, Candidate.CellY, INDEX_NONE))
+	{
+		return false;
+	}
+
+	// ===== Снимаем визуал (как в UnequipSlot), но оружие теперь через WeaponActor =====
+	switch (SlotType)
+	{
+	case EEquipmentSlotType::EquipmentSlotHelmet:
+		if (Mesh_Helmet) Mesh_Helmet->SetSkeletalMesh(nullptr);
+		break;
+
+	case EEquipmentSlotType::EquipmentSlotArmor:
+		if (Mesh_Armor) Mesh_Armor->SetSkeletalMesh(nullptr);
+		break;
+
+	case EEquipmentSlotType::EquipmentSlotMask:
+		if (Mesh_Mask) Mesh_Mask->SetSkeletalMesh(nullptr);
+		break;
+
+	case EEquipmentSlotType::EquipmentSlotBackpack:
+		if (Mesh_Backpack) Mesh_Backpack->SetSkeletalMesh(nullptr);
+		break;
+
+	case EEquipmentSlotType::EquipmentSlotHead:
+		if (Mesh_Head) Mesh_Head->SetSkeletalMesh(DefaultHeadMesh);
+		break;
+
+	case EEquipmentSlotType::EquipmentSlotBody:
+		if (Mesh_Body) Mesh_Body->SetSkeletalMesh(DefaultBodyMesh);
+		break;
+
+	case EEquipmentSlotType::EquipmentSlotLegs:
+		if (Mesh_Legs) Mesh_Legs->SetSkeletalMesh(DefaultLegsMesh);
+		break;
+	
+	case EEquipmentSlotType::EquipmentSlotPistol:
+	{
+		DestroyWeaponActorInSlot(EEquipmentSlotType::EquipmentSlotPistol);
+	}
+	
+	case EEquipmentSlotType::EquipmentSlotWeapon1:
+	case EEquipmentSlotType::EquipmentSlotWeapon2:
+	{
+		DestroyWeaponActorInSlot(SlotType);
+	}
+
+	default:
+		break;
+	}
+
+	// Удаляем из экипировки и кладём в инвентарь
+	EquipmentSlots.Remove(SlotType);
+	InventoryItems.Add(Candidate);
+
+	// Пересчёт стойки
+	if (IsWeaponAffectingSlot(SlotType))
+	{
+		RecalculateWeaponStateFromEquipment();
+	}
+
+	// UI
+	if (InventoryLayoutWidgetInstance)
+	{
+		InventoryLayoutWidgetInstance->DistributeItems(InventoryItems);
+		InventoryLayoutWidgetInstance->SetEquipment(EquipmentSlots);
+	}
+
+	return true;
+}
+
+bool AARESMMOCharacter::ContextMenu_Equip(FName InternalName, int32 FromCellX, int32 FromCellY)
+{
+	const int32 Index = FindInventoryIndexForAction(InventoryItems, InternalName, FromCellX, FromCellY);
+	if (Index == INDEX_NONE)
+	{
+		return false;
+	}
+
+	const FItemBaseRow ItemRow = InventoryItems[Index].ItemRow;
+
+	EquipItem(ItemRow);
+	InventoryItems.RemoveAt(Index);
+
+	RefreshInventoryUI();
+	return true;
+}
+
+bool AARESMMOCharacter::ContextMenu_Attach(FName InternalName, int32 FromCellX, int32 FromCellY)
+{
+	const int32 Index = FindInventoryIndexForAction(InventoryItems, InternalName, FromCellX, FromCellY);
+	if (Index == INDEX_NONE)
+		return false;
+
+	const FItemBaseRow ItemRow = InventoryItems[Index].ItemRow;
+
+	// только WeaponATTM
+	if (ItemRow.StoreCategory != EStoreCategory::storecat_WeaponATTM)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ContextMenu_Attach: not a weapon attachment: %s"), *ItemRow.InternalName.ToString());
+		return false;
+	}
+
+	AWeaponBase* TargetWeapon = GetBestWeaponForAttachment();
+	if (!TargetWeapon)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ContextMenu_Attach: no weapon equipped"));
+		return false;
+	}
+
+	if (!TargetWeapon->AttachItem(ItemRow))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ContextMenu_Attach: attach failed: %s"), *ItemRow.InternalName.ToString());
+		return false;
+	}
+
+	// убираем аттач из инвентаря
+	InventoryItems.RemoveAt(Index);
+	RefreshInventoryUI();
+	return true;
+}
+
+bool AARESMMOCharacter::ContextMenu_Use(FName InternalName, int32 FromCellX, int32 FromCellY)
+{
+	const int32 Index = FindInventoryIndexForAction(InventoryItems, InternalName, FromCellX, FromCellY);
+	if (Index == INDEX_NONE)
+	{
+		return false;
+	}
+
+	FInventoryItemEntry& Entry = InventoryItems[Index];
+	const FItemBaseRow& ItemRow = Entry.ItemRow;
+
+	// PlaceItem — пока заглушка (BuildingSystem позже)
+	if (ItemRow.StoreCategory == EStoreCategory::storecat_PlaceItem)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ContextMenu_Use: TODO PlaceItem/BuildingSystem. Item=%s"), *ItemRow.InternalName.ToString());
+		return true;
+	}
+
+	UseItem(ItemRow);
+
+	// Consume 1 если это стак
+	if (ItemRow.bUseStack)
+	{
+		Entry.Quantity = FMath::Max(0, Entry.Quantity - 1);
+		if (Entry.Quantity <= 0)
+		{
+			InventoryItems.RemoveAt(Index);
+		}
+	}
+	else
+	{
+		InventoryItems.RemoveAt(Index);
+	}
+
+	RefreshInventoryUI();
+	return true;
+}
+
+bool AARESMMOCharacter::ContextMenu_Study(FName InternalName, int32 FromCellX, int32 FromCellY)
+{
+	const int32 Index = FindInventoryIndexForAction(InventoryItems, InternalName, FromCellX, FromCellY);
+	if (Index == INDEX_NONE)
+	{
+		return false;
+	}
+
+	const FItemBaseRow& ItemRow = InventoryItems[Index].ItemRow;
+
+	// Заглушка под “изучение рецепта”
+	UE_LOG(LogTemp, Warning, TEXT("ContextMenu_Study: TODO learn recipe. Item=%s"), *ItemRow.InternalName.ToString());
+	return true;
+}
+
+bool AARESMMOCharacter::ContextMenu_Drop(FName InternalName, int32 FromCellX, int32 FromCellY)
+{
+	const int32 Index = FindInventoryIndexForAction(InventoryItems, InternalName, FromCellX, FromCellY);
+	if (Index == INDEX_NONE)
+	{
+		return false;
+	}
+
+	const FInventoryItemEntry Dropped = InventoryItems[Index];
+	InventoryItems.RemoveAt(Index);
+
+	// Спавним WorldItemActor перед игроком
+	if (UWorld* W = GetWorld())
+	{
+		const FVector SpawnLoc = GetActorLocation() + GetActorForwardVector() * 120.f + FVector(0.f, 0.f, 30.f);
+		const FRotator SpawnRot = FRotator::ZeroRotator;
+
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AdjustIfPossibleButAlwaysSpawn;
+
+		AWorldItemActor* WorldItem = W->SpawnActor<AWorldItemActor>(AWorldItemActor::StaticClass(), SpawnLoc, SpawnRot, Params);
+		if (WorldItem)
+		{
+			const int32 StackCount = Dropped.ItemRow.bUseStack ? FMath::Max(1, Dropped.Quantity) : 1;
+			WorldItem->InitFromItemID(Dropped.ItemRow.ItemID, StackCount);
+		}
+	}
+
+	RefreshInventoryUI();
+	return true;
+}
+
+bool AARESMMOCharacter::ContextMenu_ChargeItem(FName InternalName, int32 FromCellX, int32 FromCellY)
+{
+	const int32 TargetIndex = FindInventoryIndexForAction(InventoryItems, InternalName, FromCellX, FromCellY);
+	if (TargetIndex == INDEX_NONE)
+	{
+		return false;
+	}
+
+	FInventoryItemEntry& Target = InventoryItems[TargetIndex];
+
+	// предмет должен юзать заряд
+	if (!Target.ItemRow.bUseCharge || Target.ItemRow.MaxCharge <= 0)
+	{
+		return false;
+	}
+
+	const int32 BatteryIndex = FindBySubCategory(InventoryItems, EStoreSubCategory::Item_Battery);
+	if (BatteryIndex == INDEX_NONE)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ContextMenu_ChargeItem: no batteries"));
+		return false;
+	}
+
+	// Снимаем 1 батарейку
+	FInventoryItemEntry& Battery = InventoryItems[BatteryIndex];
+	if (Battery.ItemRow.bUseStack)
+	{
+		Battery.Quantity = FMath::Max(0, Battery.Quantity - 1);
+		if (Battery.Quantity <= 0)
+		{
+			InventoryItems.RemoveAt(BatteryIndex);
+		}
+	}
+	else
+	{
+		InventoryItems.RemoveAt(BatteryIndex);
+	}
+
+	Target.ItemRow.DefaultCharge = Target.ItemRow.MaxCharge;
+
+	RefreshInventoryUI();
+	return true;
+}
+
+bool AARESMMOCharacter::ContextMenu_ChargeMagazine(FName InternalName, int32 FromCellX, int32 FromCellY)
+{
+	const int32 TargetIndex = FindInventoryIndexForAction(InventoryItems, InternalName, FromCellX, FromCellY);
+	if (TargetIndex == INDEX_NONE)
+	{
+		return false;
+	}
+
+	FInventoryItemEntry& Mag = InventoryItems[TargetIndex];
+
+	if (Mag.ItemRow.StoreSubCategory != EStoreSubCategory::WeaponATTM_Magazine)
+	{
+		return false;
+	}
+
+	if (!Mag.ItemRow.bUseCharge || Mag.ItemRow.MaxCharge <= 0)
+	{
+		return false;
+	}
+
+	const int32 Need = FMath::Max(0, Mag.ItemRow.MaxCharge - Mag.ItemRow.DefaultCharge);
+	if (Need <= 0)
+	{
+		return true;
+	}
+
+	const int32 AmmoIndex = FindAnyAmmoIndex(InventoryItems);
+	if (AmmoIndex == INDEX_NONE)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ContextMenu_ChargeMagazine: no ammo"));
+		return false;
+	}
+
+	FInventoryItemEntry& Ammo = InventoryItems[AmmoIndex];
+
+	const int32 Have = Ammo.ItemRow.bUseStack ? FMath::Max(0, Ammo.Quantity) : 1;
+	const int32 Take = FMath::Min(Need, Have);
+
+	Mag.ItemRow.DefaultCharge += Take;
+
+	// consume ammo
+	if (Ammo.ItemRow.bUseStack)
+	{
+		Ammo.Quantity = FMath::Max(0, Ammo.Quantity - Take);
+		if (Ammo.Quantity <= 0)
+		{
+			InventoryItems.RemoveAt(AmmoIndex);
+		}
+	}
+	else
+	{
+		InventoryItems.RemoveAt(AmmoIndex);
+	}
+
+	RefreshInventoryUI();
+	return true;
+}
+
+bool AARESMMOCharacter::ContextMenu_Repair(FName InternalName, int32 FromCellX, int32 FromCellY)
+{
+	const int32 TargetIndex = FindInventoryIndexForAction(InventoryItems, InternalName, FromCellX, FromCellY);
+	if (TargetIndex == INDEX_NONE)
+	{
+		return false;
+	}
+
+	FInventoryItemEntry& Target = InventoryItems[TargetIndex];
+
+	if (!Target.ItemRow.bUseDurability || Target.ItemRow.MaxDurability <= 0.f)
+	{
+		return false;
+	}
+
+	const int32 KitIndex = FindBySubCategory(InventoryItems, EStoreSubCategory::Item_RapairKit);
+	if (KitIndex == INDEX_NONE)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ContextMenu_Repair: no repair kit"));
+		return false;
+	}
+
+	FInventoryItemEntry& Kit = InventoryItems[KitIndex];
+
+	// 1 use = -1 charge (если charge не настроен, считаем что 4 по умолчанию)
+	if (!Kit.ItemRow.bUseCharge)
+	{
+		Kit.ItemRow.bUseCharge = true;
+		Kit.ItemRow.MaxCharge = 4;
+		if (Kit.ItemRow.DefaultCharge <= 0) Kit.ItemRow.DefaultCharge = 4;
+	}
+
+	Kit.ItemRow.DefaultCharge = FMath::Max(0, Kit.ItemRow.DefaultCharge - 1);
+	if (Kit.ItemRow.DefaultCharge <= 0)
+	{
+		InventoryItems.RemoveAt(KitIndex);
+	}
+
+	Target.ItemRow.DefaultDurability = Target.ItemRow.MaxDurability;
+
+	RefreshInventoryUI();
+	return true;
 }

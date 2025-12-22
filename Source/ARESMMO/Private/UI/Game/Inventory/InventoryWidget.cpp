@@ -1,68 +1,65 @@
 #include "UI/Game/Inventory/InventoryWidget.h"
+#include "UI/Game/Inventory/Context/ItemDragDropOperation.h"
+#include "UI/Game/Inventory/Context/ItemTooltipWidget.h"
 #include "UI/Game/Inventory/ItemSlotWidget.h"
-#include "UI/Game/Inventory/ItemDragDropOperation.h"
-#include "UI/Game/Inventory/ItemDragWidget.h"
-#include "UI/Game/Inventory/InventoryLayoutWidget.h"
+#include "UI/Game/Inventory/Context/ItemActionMenuWidget.h"
 #include "Components/CanvasPanel.h"
 #include "Components/CanvasPanelSlot.h"
+#include "Components/Button.h"
 #include "Blueprint/UserWidget.h"
 #include "ARESMMO/ARESMMOCharacter.h"
-
-void UInventoryWidget::SetOwningLayout(UInventoryLayoutWidget* Layout)
-{
-	OwningLayout = Layout;
-}
 
 void UInventoryWidget::NativeConstruct()
 {
 	Super::NativeConstruct();
 
 	RebuildInventory();
-}
-
-bool UInventoryWidget::NativeOnDragOver(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent,
-		UDragDropOperation* InOperation)
-{
-	// Разрешаем Drop, если прилетел наш DragOp
-	return InOperation && InOperation->IsA(UItemDragDropOperation::StaticClass());
+	EnsureTooltipCreated();
+	EnsureActionMenuCreated();
 }
 
 bool UInventoryWidget::NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent,
-		UDragDropOperation* InOperation)
+	UDragDropOperation* InOperation)
 {
-	const UItemDragDropOperation* DragOp = Cast<UItemDragDropOperation>(InOperation);
-	if (!DragOp || !OwningLayout.IsValid())
+	const UItemDragDropOperation* Op = Cast<UItemDragDropOperation>(InOperation);
+	if (!Op)
 	{
-		return Super::NativeOnDrop(InGeometry, InDragDropEvent, InOperation);
+		return false;
 	}
 
-	AARESMMOCharacter* Character = OwningLayout->GetPreviewCharacter();
-	if (!Character)
+	AARESMMOCharacter* Char = Cast<AARESMMOCharacter>(GetOwningPlayerPawn());
+	if (!Char)
 	{
-		return Super::NativeOnDrop(InGeometry, InDragDropEvent, InOperation);
+		return false;
 	}
 
 	const FVector2D LocalPos = InGeometry.AbsoluteToLocal(InDragDropEvent.GetScreenSpacePosition());
-	const int32 DropCellX = FMath::FloorToInt(LocalPos.X / CellSize);
-	const int32 DropCellY = FMath::FloorToInt(LocalPos.Y / CellSize);
 
-	bool bResult = false;
+	int32 TargetCellX = FMath::FloorToInt(LocalPos.X / CellSize);
+	int32 TargetCellY = FMath::FloorToInt(LocalPos.Y / CellSize);
 
-	if (DragOp->bFromEquipment)
+	// если бросили мимо сетки — отбой
+	if (TargetCellX < 0 || TargetCellX >= InventoryWidthCells || TargetCellY < 0 || TargetCellY >= InventoryHeightCells)
 	{
-		bResult = Character->UnequipSlot(DragOp->SourceEquipmentSlot, DropCellX, DropCellY);
-	}
-	else
-	{
-		bResult = Character->MoveInventoryItem(
-				DragOp->ItemRow,
-				DragOp->SourceCellX,
-				DragOp->SourceCellY,
-				DropCellX,
-				DropCellY);
+		return false;
 	}
 
-	return bResult;
+	UE_LOG(LogTemp, Log, TEXT("InventoryWidget Drop: Source=%d to (%d,%d)"),
+		(int32)Op->SourceType, TargetCellX, TargetCellY);
+
+	// Equipment -> Inventory
+	if (Op->SourceType == EItemDragSource::Equipment)
+	{
+		return Char->UnequipSlotToInventoryAt(Op->FromSlot, TargetCellX, TargetCellY);
+	}
+
+	// Inventory -> Inventory
+	if (Op->SourceType == EItemDragSource::Inventory)
+	{
+		return Char->MoveInventoryItem(Op->ItemRow.InternalName, Op->FromCellX, Op->FromCellY, TargetCellX, TargetCellY);
+	}
+
+	return false;
 }
 
 void UInventoryWidget::SetAllItems(const TArray<FInventoryItemEntry>& NewItems)
@@ -84,6 +81,13 @@ void UInventoryWidget::RebuildInventory()
 
 	InventoryCanvas->ClearChildren();
 
+	// Tooltip
+	EnsureTooltipCreated();
+
+	// Context menu
+	EnsureActionMenuCreated();
+	HideItemActionMenu();
+
 	TArray<FInventoryItemEntry> Filtered;
 	const bool bUseFilter = FilterCategories.Num() > 0;
 
@@ -104,7 +108,7 @@ void UInventoryWidget::RebuildInventory()
 
 	//  - вкладка "All" (без фильтра) показывает реальные координаты из инвентаря
 	//  - остальные вкладки уплотняем с (0,0)
-	if (bUseFilter)
+	if (bUseFilter && bPackFilteredTabs)
 	{
 		PackItemsIntoLocalGrid(Filtered);
 	}
@@ -182,7 +186,7 @@ void UInventoryWidget::BuildEmptySlots(const TArray<FInventoryItemEntry>& Source
 				continue;
 			}
 
-			UUserWidget* SlotWidget = CreateWidget<UUserWidget>(GetOwningPlayer(), EmptySlotWidgetClass);
+			UUserWidget* SlotWidget = CreateWidget<UUserWidget>(GetWorld(), EmptySlotWidgetClass);
 			if (!SlotWidget)
 			{
 				continue;
@@ -232,14 +236,7 @@ void UInventoryWidget::CreateItemWidget(const FInventoryItemEntry& Entry)
 	}
 
 	// создаём КОНКРЕТНО UItemSlotWidget
-	/*UItemSlotWidget* ItemWidget = CreateWidget<UItemSlotWidget>(GetWorld(), ItemWidgetClass);
-	if (!ItemWidget)
-	{
-		//UE_LOG(LogTemp, Warning, TEXT("CreateItemWidget: failed to create ItemSlotWidget"));
-		//return;
-	}*/
-
-	UItemDragWidget* ItemWidget = CreateWidget<UItemDragWidget>(GetOwningPlayer(), ItemWidgetClass);
+	UItemSlotWidget* ItemWidget = CreateWidget<UItemSlotWidget>(GetWorld(), ItemWidgetClass);
 	if (!ItemWidget)
 	{
 		UE_LOG(LogTemp, Warning, TEXT("CreateItemWidget: failed to create ItemSlotWidget"));
@@ -253,7 +250,8 @@ void UInventoryWidget::CreateItemWidget(const FInventoryItemEntry& Entry)
 		return;
 	}
 
-	ItemWidget->InitItem(Entry);
+	ItemWidget->InitItem(Entry.ItemRow, Entry.SizeInCells, Entry.CellX, Entry.CellY, Entry.Quantity);
+	ItemWidget->SetOwnerInventory(this);
 	ItemWidget->OnItemDoubleClicked.AddDynamic(this, &UInventoryWidget::HandleItemSlotDoubleClicked);
 
 	const float PosX = Entry.CellX * CellSize;
@@ -360,4 +358,270 @@ void UInventoryWidget::PackItemsIntoLocalGrid(TArray<FInventoryItemEntry>& Items
 void UInventoryWidget::HandleItemSlotDoubleClicked(const FItemBaseRow& ItemRow)
 {
 	OnItemEquipRequested.Broadcast(ItemRow);
+}
+
+void UInventoryWidget::ShowItemTooltip(const FItemBaseRow& ItemRow, int32 Quantity, const FVector2D& ScreenPos)
+{
+	EnsureTooltipCreated();
+	if (!ItemTooltipWidget || !InventoryCanvas)
+	{
+		return;
+	}
+
+	ItemTooltipWidget->SetTooltipData(ItemRow, Quantity);
+	ItemTooltipWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+
+	ItemTooltipWidget->ForceLayoutPrepass();
+
+	UCanvasPanelSlot* TootipSlot = Cast<UCanvasPanelSlot>(ItemTooltipWidget->Slot);
+	if (!TootipSlot)
+	{
+		return;
+	}
+
+	const FGeometry& CanvasGeo = InventoryCanvas->GetCachedGeometry();
+	FVector2D Local = CanvasGeo.AbsoluteToLocal(ScreenPos) + FVector2D(16.f, 16.f);
+
+	const FVector2D CanvasSize = CanvasGeo.GetLocalSize();
+	FVector2D Desired = ItemTooltipWidget->GetDesiredSize();
+	if (Desired.IsNearlyZero())
+	{
+		Desired = FVector2D(320.f, 200.f);
+	}
+
+	Local.X = FMath::Clamp(Local.X, 0.f, FMath::Max(0.f, CanvasSize.X - Desired.X));
+	Local.Y = FMath::Clamp(Local.Y, 0.f, FMath::Max(0.f, CanvasSize.Y - Desired.Y));
+
+	TootipSlot->SetPosition(Local);
+}
+
+void UInventoryWidget::HideItemTooltip()
+{
+	if (ItemTooltipWidget)
+	{
+		ItemTooltipWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
+void UInventoryWidget::ShowItemActionMenu(const FItemBaseRow& ItemRow, int32 CellX, int32 CellY, int32 Quantity,
+	const FVector2D& ScreenPos)
+{
+	CancelCloseItemActionMenu();
+	EnsureActionMenuCreated();
+	
+	if (!ItemActionMenuWidget || !InventoryCanvas)
+	{
+		return;
+	}
+
+	// запомнили контекст
+	Menu_InternalName = ItemRow.InternalName;
+	Menu_CellX = CellX;
+	Menu_CellY = CellY;
+	Menu_Quantity = Quantity;
+
+	// ресурсы в инвентаре
+	const bool bHasBattery   = HasSubCategory(EStoreSubCategory::Item_Battery);
+	const bool bHasRepairKit = HasSubCategory(EStoreSubCategory::Item_RapairKit);
+	const bool bHasAmmo      = HasAnyAmmo();
+
+	ItemActionMenuWidget->SetupForItem(ItemRow, bHasBattery, bHasAmmo, bHasRepairKit);
+	ItemActionMenuWidget->SetVisibility(ESlateVisibility::Visible);
+	ItemActionMenuWidget->ForceLayoutPrepass();
+
+	UCanvasPanelSlot* MenuSlot = Cast<UCanvasPanelSlot>(ItemActionMenuWidget->Slot);
+	if (!MenuSlot)
+	{
+		return;
+	}
+
+	const FGeometry& CanvasGeo = InventoryCanvas->GetCachedGeometry();
+	FVector2D Local = CanvasGeo.AbsoluteToLocal(ScreenPos) + FVector2D(8.f, 8.f);
+
+	const FVector2D CanvasSize = CanvasGeo.GetLocalSize();
+	FVector2D Desired = ItemActionMenuWidget->GetDesiredSize();
+	if (Desired.IsNearlyZero())
+	{
+		Desired = FVector2D(220.f, 260.f);
+	}
+
+	Local.X = FMath::Clamp(Local.X, 0.f, FMath::Max(0.f, CanvasSize.X - Desired.X));
+	Local.Y = FMath::Clamp(Local.Y, 0.f, FMath::Max(0.f, CanvasSize.Y - Desired.Y));
+
+	MenuSlot->SetPosition(Local);
+}
+
+void UInventoryWidget::HideItemActionMenu()
+{
+	CancelCloseItemActionMenu();
+	
+	if (ItemActionMenuWidget)
+	{
+		ItemActionMenuWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
+void UInventoryWidget::RequestCloseItemActionMenu()
+{
+	if (!ItemActionMenuWidget) return;
+
+	// если уже закрыто — не трогаем
+	if (ItemActionMenuWidget->GetVisibility() != ESlateVisibility::Visible)
+		return;
+
+	// запланировать закрытие через небольшую задержку
+	if (UWorld* W = GetWorld())
+	{
+		W->GetTimerManager().ClearTimer(ActionMenuCloseTimer);
+		W->GetTimerManager().SetTimer(ActionMenuCloseTimer, this, &UInventoryWidget::HideItemActionMenu, ActionMenuCloseDelay, false);
+	}
+}
+
+void UInventoryWidget::CancelCloseItemActionMenu()
+{
+	if (UWorld* W = GetWorld())
+	{
+		W->GetTimerManager().ClearTimer(ActionMenuCloseTimer);
+	}
+}
+
+void UInventoryWidget::EnsureTooltipCreated()
+{
+	if (!InventoryCanvas)
+	{
+		return;
+	}
+
+	if (!ItemTooltipWidget && TooltipWidgetClass)
+	{
+		ItemTooltipWidget = CreateWidget<UItemTooltipWidget>(GetWorld(), TooltipWidgetClass);
+	}
+
+	if (ItemTooltipWidget && !ItemTooltipWidget->GetParent())
+	{
+		UCanvasPanelSlot* TootipSlot = InventoryCanvas->AddChildToCanvas(ItemTooltipWidget);
+		if (TootipSlot)
+		{
+			TootipSlot->SetAutoSize(true);
+			TootipSlot->SetZOrder(999); // всегда поверх всего
+		}
+
+		ItemTooltipWidget->SetVisibility(ESlateVisibility::Collapsed);
+		ItemTooltipWidget->SetIsEnabled(false); // чтобы не перехватывал ввод
+	}
+}
+
+void UInventoryWidget::EnsureActionMenuCreated()
+{
+	if (!InventoryCanvas)
+	{
+		UE_LOG(LogTemp, Error, TEXT("EnsureActionMenuCreated: InventoryCanvas = NULL"));
+		return;
+	}
+
+	if (!ActionMenuWidgetClass)
+	{
+		UE_LOG(LogTemp, Error, TEXT("EnsureActionMenuCreated: ActionMenuWidgetClass = NULL (set it in BP!)"));
+		return;
+	}
+
+	if (!ItemActionMenuWidget)
+	{
+		ItemActionMenuWidget = CreateWidget<UItemActionMenuWidget>(GetWorld(), ActionMenuWidgetClass);
+
+		if (ItemActionMenuWidget)
+		{
+			ItemActionMenuWidget->SetOwnerInventory(this);
+		}
+		
+		UE_LOG(LogTemp, Warning, TEXT("EnsureActionMenuCreated: created menu %d"), ItemActionMenuWidget ? 1 : 0);
+	}
+
+	if (ItemActionMenuWidget && !ItemActionMenuWidget->GetParent())
+	{
+		UCanvasPanelSlot* ActionSlot = InventoryCanvas->AddChildToCanvas(ItemActionMenuWidget);
+		if (ActionSlot)
+		{
+			ActionSlot->SetAutoSize(true);
+			ActionSlot->SetZOrder(1000);
+			UE_LOG(LogTemp, Warning, TEXT("EnsureActionMenuCreated: added to canvas"));
+		}
+
+		ItemActionMenuWidget->SetVisibility(ESlateVisibility::Collapsed);
+		ItemActionMenuWidget->OnActionSelected.AddDynamic(this, &UInventoryWidget::HandleContextAction);
+	}
+}
+
+void UInventoryWidget::HandleContextAction(EItemContextAction Action)
+{
+	AARESMMOCharacter* Char = Cast<AARESMMOCharacter>(GetOwningPlayerPawn());
+	if (!Char)
+	{
+		HideItemActionMenu();
+		return;
+	}
+
+	switch (Action)
+	{
+	case EItemContextAction::Equip:
+		Char->ContextMenu_Equip(Menu_InternalName, Menu_CellX, Menu_CellY);
+		break;
+
+	case EItemContextAction::Attach:
+		Char->ContextMenu_Attach(Menu_InternalName, Menu_CellX, Menu_CellY);
+		break;
+
+	case EItemContextAction::Use:
+		Char->ContextMenu_Use(Menu_InternalName, Menu_CellX, Menu_CellY);
+		break;
+
+	case EItemContextAction::Study:
+		Char->ContextMenu_Study(Menu_InternalName, Menu_CellX, Menu_CellY);
+		break;
+
+	case EItemContextAction::Drop:
+		Char->ContextMenu_Drop(Menu_InternalName, Menu_CellX, Menu_CellY);
+		break;
+
+	case EItemContextAction::ChargeItem:
+		Char->ContextMenu_ChargeItem(Menu_InternalName, Menu_CellX, Menu_CellY);
+		break;
+
+	case EItemContextAction::ChargeMagazine:
+		Char->ContextMenu_ChargeMagazine(Menu_InternalName, Menu_CellX, Menu_CellY);
+		break;
+
+	case EItemContextAction::Repair:
+		Char->ContextMenu_Repair(Menu_InternalName, Menu_CellX, Menu_CellY);
+		break;
+
+	default:
+		break;
+	}
+
+	HideItemActionMenu();
+}
+
+bool UInventoryWidget::HasSubCategory(EStoreSubCategory SubCat) const
+{
+	for (const FInventoryItemEntry& Entry : AllItems)
+	{
+		if (Entry.ItemRow.StoreSubCategory == SubCat)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+bool UInventoryWidget::HasAnyAmmo() const
+{
+	for (const FInventoryItemEntry& Entry : AllItems)
+	{
+		if (Entry.ItemRow.StoreCategory == EStoreCategory::storecat_Ammo)
+		{
+			return true;
+		}
+	}
+	return false;
 }

@@ -6,13 +6,10 @@
 #include "Items/ItemTypes.h"     // EEquipmentSlotType
 #include "EquipmentSlotWidget.generated.h"
 
-class UItemSlotWidget;
-class ARESMMOCharacter;
 class UTextBlock;
 class UImage;
 class USizeBox;
-class UItemDragDropOperation;
-class UEquipmentWidget;
+class UDragDropOperation;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnEquipmentSlotDoubleClicked, UEquipmentSlotWidget*, SlotWidget);
 
@@ -38,15 +35,6 @@ public:
 	UPROPERTY(meta=(BindWidgetOptional))
 	UImage* ItemIcon;
 
-	UPROPERTY(meta=(BindWidgetOptional))
-	UTextBlock* NameText;
-
-	UPROPERTY(meta=(BindWidgetOptional))
-	UTextBlock* ConditionText;
-
-	UPROPERTY(meta=(BindWidgetOptional))
-	UTextBlock* ChargeText;
-
 	// Текущий предмет в этом слоте (копия строки из DataTable)
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|Equipment")
 	FItemBaseRow CurrentItemRow;
@@ -58,27 +46,22 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="ARES|Equipment")
 	float CellSizePx = 64.0f;
 
-	/** Виджет, который используется в качестве Drag&Drop визуала */
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|Equipment")
-	TSubclassOf<UItemSlotWidget> DragVisualItemClass;
-
 	// Сигнал "по этому слоту даблкликнули"
 	UPROPERTY(BlueprintAssignable, Category="ARES|Equipment")
 	FOnEquipmentSlotDoubleClicked OnSlotDoubleClicked;
-
-	void SetOwnerEquipment(UEquipmentWidget* InOwner);
 
 protected:
 	// Реакция на двойной клик мышью
 	virtual FReply NativeOnMouseButtonDoubleClick(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
+	// Drag start
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 
-	virtual void NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent,
-			UDragDropOperation*& OutOperation) override;
+	// Create drag op
+	virtual void NativeOnDragDetected(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent, UDragDropOperation*& OutOperation) override;
 
-	virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent,
-			UDragDropOperation* InOperation) override;
+	// Drop handler
+	virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
 	
 public:
 	virtual void NativeConstruct() override;
@@ -93,7 +76,4 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="ARES|Equipment")
 	bool IsEmpty() const { return !bHasItem; }
-
-private:
-	TWeakObjectPtr<UEquipmentWidget> OwnerEquipment;
 };

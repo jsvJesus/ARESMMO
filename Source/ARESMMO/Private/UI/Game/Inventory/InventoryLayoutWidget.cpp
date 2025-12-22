@@ -4,6 +4,7 @@
 #include "Components/WidgetSwitcher.h"
 #include "Components/Image.h"
 #include "Components/Button.h"
+#include "Components/TextBlock.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "InputCoreTypes.h"
 #include "ARESMMO/ARESMMOCharacter.h"
@@ -18,7 +19,6 @@ void UInventoryLayoutWidget::NativeConstruct()
 	// Слушаем даблклики по слотам экипировки
 	if (EquipmentPanel)
 	{
-		EquipmentPanel->SetOwningLayout(this);
 		EquipmentPanel->OnUnequipRequested.AddDynamic(this, &UInventoryLayoutWidget::HandleUnequipRequested);
 	}
 	
@@ -28,8 +28,9 @@ void UInventoryLayoutWidget::NativeConstruct()
 		if (InvWidget)
 		{
 			InvWidget->OnItemEquipRequested.AddDynamic(
-				this, &UInventoryLayoutWidget::HandleInventoryItemEquipRequested);
-			InvWidget->SetOwningLayout(this);
+				this,
+				&UInventoryLayoutWidget::HandleInventoryItemEquipRequested
+			);
 		}
 	};
 
@@ -43,6 +44,33 @@ void UInventoryLayoutWidget::NativeConstruct()
 	BindInventory(Inv_Devices);
 	BindInventory(Inv_Craft);
 	BindInventory(Inv_Attm);
+
+	RefreshWeightText();
+}
+
+void UInventoryLayoutWidget::SetTemporaryCarryWeightBonusKg(float BonusKg)
+{
+	TemporaryCarryWeightBonusKg = BonusKg;
+	RefreshWeightText();
+}
+
+void UInventoryLayoutWidget::RefreshWeightText()
+{
+	const float CurrentKg =
+		CalcInventoryWeightKg(CachedInventoryItems) +
+		CalcEquipmentWeightKg(CachedEquipment);
+
+	const float MaxKg =
+		BaseCarryWeightKg +
+		CalcCarryBonusFromEquipmentKg(CachedEquipment) +
+		TemporaryCarryWeightBonusKg;
+
+	if (TotalWeightText)
+	{
+		// Total weight: 36.7 (max 70kg)
+		const FString S = FString::Printf(TEXT("Total weight: %.1f (max %.0fkg)"), CurrentKg, MaxKg);
+		TotalWeightText->SetText(FText::FromString(S));
+	}
 }
 
 void UInventoryLayoutWidget::ShowTab(int32 TabIndex)
@@ -127,6 +155,9 @@ void UInventoryLayoutWidget::DistributeItems(const TArray<FInventoryItemEntry>& 
 	if (Inv_Devices)Inv_Devices->SetAllItems(AllItems); // Device
 	if (Inv_Craft)  Inv_Craft->SetAllItems(AllItems); // Craft
 	if (Inv_Attm)   Inv_Attm->SetAllItems(AllItems); // Attm
+
+	CachedInventoryItems = AllItems;
+	RefreshWeightText();
 }
 
 void UInventoryLayoutWidget::SetEquipment(const TMap<EEquipmentSlotType, FItemBaseRow>& Equipment)
@@ -135,6 +166,9 @@ void UInventoryLayoutWidget::SetEquipment(const TMap<EEquipmentSlotType, FItemBa
 	{
 		EquipmentPanel->SetEquipment(Equipment);
 	}
+
+	CachedEquipment = Equipment;
+	RefreshWeightText();
 }
 
 void UInventoryLayoutWidget::SetPlayerImage(UTextureRenderTarget2D* RenderTarget)
@@ -189,6 +223,58 @@ FReply UInventoryLayoutWidget::NativeOnMouseMove(const FGeometry& InGeometry, co
 	return Super::NativeOnMouseMove(InGeometry, InMouseEvent);
 }
 
+float UInventoryLayoutWidget::CalcInventoryWeightKg(const TArray<FInventoryItemEntry>& Items) const
+{
+	float Total = 0.f;
+
+	for (const FInventoryItemEntry& Entry : Items)
+	{
+		const FItemBaseRow& Row = Entry.ItemRow;
+
+		if (!Row.bUseWeight)
+		{
+			continue;
+		}
+
+		const float UnitW = FMath::Max(0.f, Row.Weight);
+		const int32 Count = Row.bUseStack ? FMath::Max(1, Entry.Quantity) : 1;
+
+		Total += UnitW * static_cast<float>(Count);
+	}
+
+	return Total;
+}
+
+float UInventoryLayoutWidget::CalcEquipmentWeightKg(const TMap<EEquipmentSlotType, FItemBaseRow>& Equipment) const
+{
+	float Total = 0.f;
+
+	for (const auto& Pair : Equipment)
+	{
+		const FItemBaseRow& Row = Pair.Value;
+
+		if (!Row.bUseWeight)
+		{
+			continue;
+		}
+
+		Total += FMath::Max(0.f, Row.Weight);
+	}
+
+	return Total;
+}
+
+float UInventoryLayoutWidget::CalcCarryBonusFromEquipmentKg(
+	const TMap<EEquipmentSlotType, FItemBaseRow>& Equipment) const
+{
+	// Бонус даёт только рюкзак в EquipmentSlotBackpack
+	if (const FItemBaseRow* BackpackRow = Equipment.Find(EEquipmentSlotType::EquipmentSlotBackpack))
+	{
+		return BackpackRow->CarryWeightBonus;
+	}
+	return 0.f;
+}
+
 void UInventoryLayoutWidget::InitPreview(class AARESMMOCharacter* Character)
 {
 	PreviewCharacter = Character;
@@ -210,7 +296,7 @@ void UInventoryLayoutWidget::HandleUnequipRequested(EEquipmentSlotType SlotType)
 
 	if (AARESMMOCharacter* Char = PreviewCharacter.Get())
 	{
-		Char->UnequipSlot(SlotType, INDEX_NONE, INDEX_NONE);
+		Char->UnequipSlot(SlotType);
 	}
 }
 
@@ -221,7 +307,7 @@ void UInventoryLayoutWidget::HandleInventoryItemEquipRequested(const FItemBaseRo
 		return;
 	}
 
-	if (AARESMMOCharacter* Char = Cast<AARESMMOCharacter>(PreviewCharacter.Get()))
+	if (AARESMMOCharacter* Char = PreviewCharacter.Get())
 	{
 		Char->EquipItemFromInventory(ItemRow);
 	}

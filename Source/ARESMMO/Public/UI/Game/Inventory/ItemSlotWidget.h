@@ -7,8 +7,7 @@
 
 class UTextBlock;
 class UImage;
-class UItemDragDropOperation;
-struct FInventoryItemEntry;
+class UInventoryWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnInventoryItemDoubleClicked, const FItemBaseRow&, ItemRow);
 
@@ -32,7 +31,7 @@ public:
 
 	/** Устанавливается из InventoryWidget::CreateItemWidget */
 	UFUNCTION(BlueprintCallable, Category="ARES|Inventory")
-	void InitItem(const FInventoryItemEntry& Entry);
+	void InitItem(const FItemBaseRow& ItemRow, const FItemSize& GridSize, int32 InCellX, int32 InCellY, int32 InQuantity);
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	UTextBlock* NameText;
@@ -46,11 +45,6 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional))
 	UTextBlock* ChargeText;
 
-	UPROPERTY(meta = (BindWidgetOptional))
-	UTextBlock* StackText;
-
-	void SetFromEquipmentSlot(EEquipmentSlotType InSlotType) { SourceEquipmentSlot = InSlotType; bFromEquipment = true; }
-
 protected:
 	virtual void NativeConstruct() override;
 
@@ -58,27 +52,19 @@ protected:
 		const FGeometry& InGeometry,
 		const FPointerEvent& InMouseEvent) override;
 
+	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+
+	virtual void NativeOnDragDetected(
+		const FGeometry& InGeometry,
+		const FPointerEvent& InMouseEvent,
+		UDragDropOperation*& OutOperation) override;
+
+	virtual void NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual void NativeOnMouseLeave(const FPointerEvent& InMouseEvent) override;
+
 	// Храним текущий предмет
 	UPROPERTY()
 	FItemBaseRow CurrentItemRow;
-
-	UPROPERTY()
-	FItemSize CurrentItemSize;
-
-	UPROPERTY()
-	UTextBlock* CurrentNameText;
-	
-	UPROPERTY()
-	UImage* CurrentBackgroundImage;
-	
-	UPROPERTY()
-	UImage* CurrentIconImage;
-
-	int32 CurrentCellX = 0;
-	int32 CurrentCellY = 0;
-
-	bool bFromEquipment = false;
-	EEquipmentSlotType SourceEquipmentSlot = EEquipmentSlotType::None;
 
 private:
 	// Выбор правильного фона по размеру предмета
@@ -86,4 +72,13 @@ private:
 
 	FItemBaseRow CachedItemRow;
 	FItemSize    CachedSize;
+	
+	int32 CachedCellX = 0;
+	int32 CachedCellY = 0;
+	int32 CachedQuantity = 1;
+
+	TWeakObjectPtr<UInventoryWidget> OwnerInventory;
+
+public:
+	void SetOwnerInventory(UInventoryWidget* InOwner);
 };

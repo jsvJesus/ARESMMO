@@ -6,14 +6,15 @@
 #include "Styling/SlateTypes.h"
 #include "InventoryLayoutWidget.generated.h"
 
+class AARESMMOCharacter;
 class UWidgetSwitcher;
 class UInventoryWidget;
 struct FInventoryItemEntry;
 class UImage;
 class UTextureRenderTarget2D;
 class UButton;
+class UTextBlock;
 class UEquipmentWidget;
-class ARESMMOCharacter;
 
 UCLASS()
 class ARESMMO_API UInventoryLayoutWidget : public UUserWidget
@@ -93,6 +94,24 @@ public:
 	UPROPERTY(meta = (BindWidgetOptional))
 	UButton* Btn_Attm;
 
+	// --- Weight UI ---
+	UPROPERTY(meta=(BindWidgetOptional))
+	UTextBlock* TotalWeightText = nullptr;
+
+	/** База переносимого веса игрока (по умолчанию 35 кг) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="ARES|Weight")
+	float BaseCarryWeightKg = 35.f;
+
+	/** Временный бонус (стимуляторы и т.п.). Пока 0, потом будешь менять по таймеру. */
+	UPROPERTY(BlueprintReadWrite, Category="ARES|Weight")
+	float TemporaryCarryWeightBonusKg = 0.f;
+
+	UFUNCTION(BlueprintCallable, Category="ARES|Weight")
+	void SetTemporaryCarryWeightBonusKg(float BonusKg);
+
+	UFUNCTION(BlueprintCallable, Category="ARES|Weight")
+	void RefreshWeightText();
+
 	/** Текущая активная вкладка (0..9) */
 	UPROPERTY(BlueprintReadOnly, Category="ARES|Inventory|Tabs")
 	int32 CurrentTabIndex = 0;
@@ -165,13 +184,22 @@ protected:
 	virtual void NativeConstruct() override;
 
 	TWeakObjectPtr<AARESMMOCharacter> PreviewCharacter;
-	
 	bool bIsRotatingPreview = false;
 
 	// Обработка мышки для вращения
 	virtual FReply NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual FReply NativeOnMouseButtonUp(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
 	virtual FReply NativeOnMouseMove(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+
+	UPROPERTY()
+	TArray<FInventoryItemEntry> CachedInventoryItems;
+
+	UPROPERTY()
+	TMap<EEquipmentSlotType, FItemBaseRow> CachedEquipment;
+
+	float CalcInventoryWeightKg(const TArray<FInventoryItemEntry>& Items) const;
+	float CalcEquipmentWeightKg(const TMap<EEquipmentSlotType, FItemBaseRow>& Equipment) const;
+	float CalcCarryBonusFromEquipmentKg(const TMap<EEquipmentSlotType, FItemBaseRow>& Equipment) const;
 
 public:
 	UFUNCTION(BlueprintCallable, Category="ARES|Inventory")
@@ -180,6 +208,4 @@ public:
 	// Установить текстуру в PlayerRef
 	UFUNCTION(BlueprintCallable, Category="ARES|Inventory")
 	void SetPlayerImage(UTextureRenderTarget2D* RenderTarget);
-
-	AARESMMOCharacter* GetPreviewCharacter() const { return PreviewCharacter.Get(); }
 };

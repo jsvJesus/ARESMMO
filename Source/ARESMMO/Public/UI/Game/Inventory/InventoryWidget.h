@@ -3,14 +3,15 @@
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
 #include "Items/ItemData.h"
-#include "Blueprint/DragDropOperation.h"
 #include "InventoryWidget.generated.h"
 
-class UInventoryLayoutWidget;
 class UItemSlotWidget;
 class UCanvasPanel;
 class UUserWidget;
-class UItemDragWidget;
+class UDragDropOperation;
+class UItemTooltipWidget;
+class UItemActionMenuWidget;
+enum class EItemContextAction : uint8;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnInventoryItemEquipRequested, const FItemBaseRow&, ItemRow);
 
@@ -34,6 +35,10 @@ struct FInventoryItemEntry
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite)
 	int32 CellY = 0;
+
+	/** Количество в стеке (если ItemRow.bUseStack) */
+	UPROPERTY(EditAnywhere, BlueprintReadWrite)
+	int32 Quantity = 1;
 };
 
 UCLASS()
@@ -46,13 +51,9 @@ public:
 	UPROPERTY(meta=(BindWidget))
 	UCanvasPanel* InventoryCanvas;
 
-	// DragDrop
-	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|Inventory")
-	TSubclassOf<UItemDragWidget> ItemWidgetClass;
-
 	/** Виджет одного предмета (UMG — только картинка) */
-	//UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|Inventory")
-	//TSubclassOf<UItemSlotWidget> ItemWidgetClass;
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|Inventory")
+	TSubclassOf<UItemSlotWidget> ItemWidgetClass;
 
 	/** Виджет пустого слота 64x64 */
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|Inventory")
@@ -87,20 +88,34 @@ public:
 	UFUNCTION(BlueprintCallable, Category="ARES|Inventory")
 	void RebuildInventory();
 
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="ARES|Inventory")
+	bool bPackFilteredTabs = false;
+
 	// Сигнал наружу: "по этому предмету в инвентаре даблкликнули — хотим одеть"
 	UPROPERTY(BlueprintAssignable, Category="ARES|Inventory")
 	FOnInventoryItemEquipRequested OnItemEquipRequested;
 
-	void SetOwningLayout(UInventoryLayoutWidget* Layout);
+	// Tooltip
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|Inventory|Tooltip")
+	TSubclassOf<UItemTooltipWidget> TooltipWidgetClass;
+
+	UPROPERTY(Transient)
+	UItemTooltipWidget* ItemTooltipWidget = nullptr;
+
+	// ===== Context Menu =====
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|Inventory|ContextMenu")
+	TSubclassOf<UItemActionMenuWidget> ActionMenuWidgetClass;
+
+	UPROPERTY(Transient)
+	UItemActionMenuWidget* ItemActionMenuWidget = nullptr;
 
 protected:
 	virtual void NativeConstruct() override;
 
-	virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent,
-				UDragDropOperation* InOperation) override;
-
-	virtual bool NativeOnDragOver(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent,
-			UDragDropOperation* InOperation) override;
+	virtual bool NativeOnDrop(
+		const FGeometry& InGeometry,
+		const FDragDropEvent& InDragDropEvent,
+		UDragDropOperation* InOperation) override;
 
 	/** Построение пустых слотов, с учётом занятых ячеек предметами */
 	void BuildEmptySlots(const TArray<FInventoryItemEntry>& SourceItems);
@@ -116,6 +131,40 @@ protected:
 
 	UFUNCTION()
 	void HandleItemSlotDoubleClicked(const FItemBaseRow& ItemRow);
+	
+public:
+	// Tooltip
+	void ShowItemTooltip(const FItemBaseRow& ItemRow, int32 Quantity, const FVector2D& ScreenPos);
+	void HideItemTooltip();
 
-	TWeakObjectPtr<UInventoryLayoutWidget> OwningLayout;
+	// Context Menu
+	void ShowItemActionMenu(const FItemBaseRow& ItemRow, int32 CellX, int32 CellY, int32 Quantity, const FVector2D& ScreenPos);
+	void HideItemActionMenu();
+
+	// Context Menu Close
+	void RequestCloseItemActionMenu();
+	void CancelCloseItemActionMenu();
+
+private:
+	// Tooltip
+	void EnsureTooltipCreated();
+
+	// Context Menu
+	void EnsureActionMenuCreated();
+
+	UFUNCTION()
+	void HandleContextAction(EItemContextAction Action);
+
+	bool HasSubCategory(EStoreSubCategory SubCat) const;
+	bool HasAnyAmmo() const;
+
+	// текущий “выбранный” предмет для меню
+	FName Menu_InternalName = NAME_None;
+	int32 Menu_CellX = 0;
+	int32 Menu_CellY = 0;
+	int32 Menu_Quantity = 1;
+
+	// Context Menu Close
+	FTimerHandle ActionMenuCloseTimer;
+	float ActionMenuCloseDelay = 0.15f;
 };

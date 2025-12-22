@@ -22,6 +22,8 @@ class UTextureRenderTarget2D;
 class USceneComponent;
 struct FInputActionValue;
 class AWorldItemActor;
+class AWeaponBase;
+class AInventoryPreviewCaptureActor;
 
 DECLARE_LOG_CATEGORY_EXTERN(LogTemplateCharacter, Log, All);
 
@@ -41,13 +43,6 @@ class AARESMMOCharacter : public ACharacter
 	/** Camera FPS Action */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
 	UCameraComponent* FPSCamera;
-
-	// ===== Inventory Preview =====
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|InventoryPreview", meta = (AllowPrivateAccess = "true"))
-	USceneCaptureComponent2D* InventoryCapture;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|InventoryPreview", meta=(AllowPrivateAccess="true"))
-	USceneComponent* InventoryPreviewPivot;
 	
 	/** MappingContext */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
@@ -80,6 +75,18 @@ class AARESMMOCharacter : public ACharacter
 	
 public:
 	AARESMMOCharacter();
+
+	// ===== Inventory Preview =====
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|InventoryPreview", meta = (AllowPrivateAccess = "true"))
+	USceneCaptureComponent2D* InventoryCapture;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|InventoryPreview", meta=(AllowPrivateAccess="true"))
+	USceneComponent* InventoryPreviewPivot = nullptr;
+
+	FORCEINLINE USceneComponent* GetInventoryPreviewPivot() const { return InventoryPreviewPivot; }
+
+	UFUNCTION(BlueprintCallable, Category="ARES|InventoryPreview")
+	void UpdateInventoryPreviewShowOnly();
 
 protected:
 	void Move(const FInputActionValue& Value);
@@ -120,6 +127,23 @@ protected:
 
 	UFUNCTION(BlueprintCallable, Category="ARES|Anim")
 	void RecalculateWeaponStateFromEquipment();
+
+	// ===== Weapon Actor Helpers =====
+	AWeaponBase* GetWeaponActorInSlot(EEquipmentSlotType SlotType) const;
+	void SetWeaponActorInSlot(EEquipmentSlotType SlotType, AWeaponBase* Weapon);
+
+	bool EquipWeaponActorToSlot(const FItemBaseRow& ItemRow, EEquipmentSlotType SlotType);
+	void DestroyWeaponActorInSlot(EEquipmentSlotType SlotType);
+
+	FName ResolveWeaponAttachName(EEquipmentSlotType SlotType, const FItemBaseRow& ItemRow) const;
+
+	// Какое оружие считать "активным" для Attach (пока приоритет Weapon1->Weapon2->Pistol)
+	AWeaponBase* GetBestWeaponForAttachment() const;
+	
+	void SetSelectedWeaponInternal(AWeaponBase* NewWeapon);
+
+	UPROPERTY()
+	TObjectPtr<AInventoryPreviewCaptureActor> InventoryPreviewActor = nullptr;
 
 public:
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
@@ -189,15 +213,27 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|EquipmentMesh")
 	USkeletalMeshComponent* Mesh_Backpack;
 
-	// ===== Weapon Visual Meshes =====
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|WeaponMesh")
-	USkeletalMeshComponent* Mesh_Rifle = nullptr;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|WeaponMesh")
-	USkeletalMeshComponent* Mesh_Pistol = nullptr;
-
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|Equipment")
 	TMap<EEquipmentSlotType, FItemBaseRow> EquipmentSlots;
+
+	// ===== Weapon Actors (NEW) =====
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|WeaponActors")
+	TObjectPtr<AWeaponBase> WeaponActor_Weapon1 = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|WeaponActors")
+	TObjectPtr<AWeaponBase> WeaponActor_Weapon2 = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|WeaponActors")
+	TObjectPtr<AWeaponBase> WeaponActor_Pistol = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|WeaponActors")
+	TObjectPtr<AWeaponBase> SelectedWeapon = nullptr;
+
+	UFUNCTION(BlueprintCallable, Category="ARES|Weapon")
+	void SelectWeaponSlot(EEquipmentSlotType SlotType);
+
+	UFUNCTION(BlueprintCallable, Category="ARES|Weapon")
+	AWeaponBase* GetSelectedWeapon() const { return SelectedWeapon; }
 
 	// ===== PLAYER STATS =====
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|Stats")
@@ -225,7 +261,7 @@ public:
 
 	// ===== Equipment =====
 	UFUNCTION(BlueprintCallable, Category="ARES|Equipment")
-	bool UnequipSlot(EEquipmentSlotType SlotType, int32 TargetCellX, int32 TargetCellY);
+	bool UnequipSlot(EEquipmentSlotType SlotType);
 
 	// ===== Inventory / Fast Equip =====
 	UFUNCTION(BlueprintCallable, Category="ARES|Inventory")
@@ -249,17 +285,47 @@ public:
 	UFUNCTION(BlueprintCallable, Category="ARES|Inventory")
 	bool AddItemToInventory(const FItemBaseRow& ItemRow, int32 StackCount);
 
-	UFUNCTION(BlueprintCallable, Category="ARES|Inventory")
-	bool AddItemToInventoryAt(const FItemBaseRow& ItemRow, int32 CellX, int32 CellY);
-
-	UFUNCTION(BlueprintCallable, Category="ARES|Inventory")
-	bool MoveInventoryItem(const FItemBaseRow& ItemRow, int32 FromX, int32 FromY, int32 ToX, int32 ToY);
-
-	bool CanPlaceInventoryEntry(const FInventoryItemEntry& Entry, int32 IgnoreIndex) const;
-
 	/** Подобрать актор предмета в мире */
 	UFUNCTION(BlueprintCallable, Category="ARES|Inventory")
 	void PickupWorldItem(class AWorldItemActor* WorldItem);
+
+	UFUNCTION(BlueprintCallable, Category="ARES|Inventory")
+	void RefreshInventoryUI();
+
+	// ===== Drag&Drop (Inventory <-> Equipment) =====
+	UFUNCTION(BlueprintCallable, Category="ARES|Inventory|DragDrop")
+	bool MoveInventoryItem(FName InternalName, int32 FromCellX, int32 FromCellY, int32 ToCellX, int32 ToCellY);
+
+	UFUNCTION(BlueprintCallable, Category="ARES|Inventory|DragDrop")
+	bool EquipInventoryItemToSlot(FName InternalName, int32 FromCellX, int32 FromCellY, EEquipmentSlotType TargetSlot);
+
+	UFUNCTION(BlueprintCallable, Category="ARES|Inventory|DragDrop")
+	bool UnequipSlotToInventoryAt(EEquipmentSlotType SlotType, int32 ToCellX, int32 ToCellY);
+
+	// ===== Context Menu Actions =====
+	UFUNCTION(BlueprintCallable, Category="ARES|Inventory|ContextMenu")
+	bool ContextMenu_Equip(FName InternalName, int32 FromCellX, int32 FromCellY);
+
+	UFUNCTION(BlueprintCallable, Category="ARES|Inventory|ContextMenu")
+	bool ContextMenu_Attach(FName InternalName, int32 FromCellX, int32 FromCellY);
+
+	UFUNCTION(BlueprintCallable, Category="ARES|Inventory|ContextMenu")
+	bool ContextMenu_Use(FName InternalName, int32 FromCellX, int32 FromCellY);
+
+	UFUNCTION(BlueprintCallable, Category="ARES|Inventory|ContextMenu")
+	bool ContextMenu_Study(FName InternalName, int32 FromCellX, int32 FromCellY);
+
+	UFUNCTION(BlueprintCallable, Category="ARES|Inventory|ContextMenu")
+	bool ContextMenu_Drop(FName InternalName, int32 FromCellX, int32 FromCellY);
+
+	UFUNCTION(BlueprintCallable, Category="ARES|Inventory|ContextMenu")
+	bool ContextMenu_ChargeItem(FName InternalName, int32 FromCellX, int32 FromCellY);
+
+	UFUNCTION(BlueprintCallable, Category="ARES|Inventory|ContextMenu")
+	bool ContextMenu_ChargeMagazine(FName InternalName, int32 FromCellX, int32 FromCellY);
+
+	UFUNCTION(BlueprintCallable, Category="ARES|Inventory|ContextMenu")
+	bool ContextMenu_Repair(FName InternalName, int32 FromCellX, int32 FromCellY);
 
 	// ===== Zoom (ПКМ, только TPS, без AimOffset) =====
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|Camera")
@@ -338,6 +404,10 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|Anim|AimOffset", meta=(AllowPrivateAccess="true"))
 	float Pitch = 0.0f;
+
+	// ============== Weapon IK ==============
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="ARES|Anim|IK")
+	float Hands_IK_Weight = 0.0f;
 
 	// ============== Turn In Place ==============
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|Anim|TurnInPlace", meta=(AllowPrivateAccess="true"))
