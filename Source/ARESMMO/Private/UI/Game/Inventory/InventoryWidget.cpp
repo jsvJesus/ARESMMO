@@ -444,6 +444,8 @@ void UInventoryWidget::ShowItemActionMenu(const FItemBaseRow& ItemRow, int32 Cel
 		return;
 	}
 
+	AttachActionMenuToCanvas();
+
 	// запомнили контекст
 	Menu_InternalName = ItemRow.InternalName;
 	Menu_CellX = CellX;
@@ -525,6 +527,18 @@ void UInventoryWidget::ShowEquipmentActionMenu(
 	Menu_EquipmentSlot = SlotType;
 
 	ItemActionMenuWidget->SetupForEquipmentItem(ItemRow);
+	if (AARESMMOCharacter* Char = Cast<AARESMMOCharacter>(GetOwningPlayerPawn()))
+	{
+		TSet<EStoreSubCategory> DetachOptions;
+		if (AWeaponBase* Weapon = Char->GetWeaponActorInSlot(SlotType))
+		{
+			for (const auto& Pair : Weapon->AttachedATTM)
+			{
+				DetachOptions.Add(Pair.Key);
+			}
+		}
+		ItemActionMenuWidget->SetDetachOptions(DetachOptions);
+	}
 	ItemActionMenuWidget->SetVisibility(ESlateVisibility::Visible);
 	ItemActionMenuWidget->ForceLayoutPrepass();
 
@@ -728,6 +742,17 @@ void UInventoryWidget::HandleContextAction(EItemContextAction Action)
 		if (Action == EItemContextAction::Equip && Menu_EquipmentSlot != EEquipmentSlotType::None)
 		{
 			Char->UnequipSlot(Menu_EquipmentSlot);
+		}
+		else if (Action == EItemContextAction::Detach && Menu_EquipmentSlot != EEquipmentSlotType::None)
+		{
+			if (ItemActionMenuWidget)
+			{
+				const EStoreSubCategory SubCategory = ItemActionMenuWidget->ConsumePendingDetachSubCategory();
+				if (SubCategory != EStoreSubCategory::None)
+				{
+					Char->DetachWeaponATTMFromSlotToInventory(Menu_EquipmentSlot, SubCategory);
+				}
+			}
 		}
 
 		HideItemActionMenu();

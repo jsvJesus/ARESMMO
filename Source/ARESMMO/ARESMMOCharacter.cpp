@@ -723,6 +723,38 @@ bool AARESMMOCharacter::DetachWeaponATTMToInventory(EStoreSubCategory SubCategor
 	return true;
 }
 
+bool AARESMMOCharacter::DetachWeaponATTMFromSlotToInventory(
+	EEquipmentSlotType SlotType,
+	EStoreSubCategory SubCategory)
+{
+	AWeaponBase* Weapon = GetWeaponActorInSlot(SlotType);
+	if (!Weapon)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("DetachWeaponATTMFromSlotToInventory: No weapon in slot %d"), (int32)SlotType);
+		return false;
+	}
+
+	FItemBaseRow DetachedRow;
+	FString FailReason;
+	if (!Weapon->DetachItem(SubCategory, DetachedRow, FailReason))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("DetachWeaponATTMFromSlotToInventory: detach failed: %s | Slot=%d"),
+			*FailReason, (int32)SubCategory);
+		return false;
+	}
+
+	if (!AddItemToInventory(DetachedRow, 1))
+	{
+		Weapon->AttachItem(DetachedRow);
+		UE_LOG(LogTemp, Warning, TEXT("DetachWeaponATTMFromSlotToInventory: inventory full, rollback attach. | Item=%s"),
+			*DetachedRow.InternalName.ToString());
+		return false;
+	}
+
+	RefreshInventoryUI();
+	return true;
+}
+
 void AARESMMOCharacter::SelectWeaponSlot(EEquipmentSlotType SlotType)
 {
 	AWeaponBase* W = GetWeaponActorInSlot(SlotType);

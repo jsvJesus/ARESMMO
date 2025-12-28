@@ -5,6 +5,7 @@
 #include "Items/ItemData.h"
 #include "ItemActionMenuWidget.generated.h"
 
+class UTextBlock;
 class UButton;
 class UInventoryWidget;
 
@@ -71,6 +72,7 @@ protected:
 	UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_ChargeItem = nullptr;
 	UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_ChargeMagazine = nullptr;
 	UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_Repair = nullptr;
+	UPROPERTY(meta=(BindWidgetOptional)) UTextBlock* EquipText = nullptr;
 
 	UFUNCTION() void ClickEquip();
 	UFUNCTION() void ClickAttach();
@@ -98,7 +100,7 @@ private:
 	void SetDetachButtonVisibleFor(EStoreSubCategory SubCategory, bool bVisible);
 	void QueueDetachAction(EStoreSubCategory SubCategory);
 
-	bool bDetachExpanded = false;
+	void SetEquipLabel(const FText& Label);
 
 	// Context Menu Close
 	TWeakObjectPtr<UInventoryWidget> OwnerInventoryWidget;

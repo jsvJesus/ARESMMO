@@ -140,7 +140,6 @@ protected:
 	void RecalculateWeaponStateFromEquipment();
 
 	// ===== Weapon Actor Helpers =====
-	AWeaponBase* GetWeaponActorInSlot(EEquipmentSlotType SlotType) const;
 	void SetWeaponActorInSlot(EEquipmentSlotType SlotType, AWeaponBase* Weapon);
 
 	bool EquipWeaponActorToSlot(const FItemBaseRow& ItemRow, EEquipmentSlotType SlotType);
@@ -158,6 +157,7 @@ public:
 
 	// Какое оружие считать "активным" для Attach (пока приоритет Weapon1->Weapon2->Pistol)
 	AWeaponBase* GetBestWeaponForAttachment() const;
+	AWeaponBase* GetWeaponActorInSlot(EEquipmentSlotType SlotType) const;
 
 	UFUNCTION(BlueprintPure, Category="ARES|Camera")
 	bool IsFirstPerson() const { return bIsFirstPerson; }
@@ -261,6 +261,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="ARES|Weapon|Attachment")
 	bool DetachWeaponATTMToInventory(EStoreSubCategory SubCategory);
+
+	UFUNCTION(BlueprintCallable, Category="ARES|Weapon|Attachment")
+	bool DetachWeaponATTMFromSlotToInventory(EEquipmentSlotType SlotType, EStoreSubCategory SubCategory);
 
 	UFUNCTION(BlueprintCallable, Category="ARES|Weapon")
 	void SelectWeaponSlot(EEquipmentSlotType SlotType);
