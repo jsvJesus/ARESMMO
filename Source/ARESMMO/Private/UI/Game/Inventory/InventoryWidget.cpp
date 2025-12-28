@@ -8,6 +8,7 @@
 #include "Components/Button.h"
 #include "Blueprint/UserWidget.h"
 #include "ARESMMO/ARESMMOCharacter.h"
+#include "Weapons/WeaponBase.h"
 
 void UInventoryWidget::NativeConstruct()
 {
@@ -426,6 +427,25 @@ void UInventoryWidget::ShowItemActionMenu(const FItemBaseRow& ItemRow, int32 Cel
 	const bool bHasAmmo      = HasAnyAmmo();
 
 	ItemActionMenuWidget->SetupForItem(ItemRow, bHasBattery, bHasAmmo, bHasRepairKit);
+	if (AARESMMOCharacter* Char = Cast<AARESMMOCharacter>(GetOwningPlayerPawn()))
+	{
+		TSet<EStoreSubCategory> DetachOptions;
+		AWeaponBase* Weapon = Char->GetSelectedWeapon();
+		if (!Weapon)
+		{
+			Weapon = Char->GetBestWeaponForAttachment();
+		}
+
+		if (Weapon)
+		{
+			for (const auto& Pair : Weapon->AttachedATTM)
+			{
+				DetachOptions.Add(Pair.Key);
+			}
+		}
+
+		ItemActionMenuWidget->SetDetachOptions(DetachOptions);
+	}
 	ItemActionMenuWidget->SetVisibility(ESlateVisibility::Visible);
 	ItemActionMenuWidget->ForceLayoutPrepass();
 
@@ -569,6 +589,17 @@ void UInventoryWidget::HandleContextAction(EItemContextAction Action)
 
 	case EItemContextAction::Attach:
 		Char->ContextMenu_Attach(Menu_InternalName, Menu_CellX, Menu_CellY);
+		break;
+
+	case EItemContextAction::Detach:
+		if (ItemActionMenuWidget)
+		{
+			const EStoreSubCategory SubCategory = ItemActionMenuWidget->ConsumePendingDetachSubCategory();
+			if (SubCategory != EStoreSubCategory::None)
+			{
+				Char->DetachWeaponATTMToInventory(SubCategory);
+			}
+		}
 		break;
 
 	case EItemContextAction::Use:

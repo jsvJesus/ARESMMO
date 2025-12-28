@@ -44,8 +44,14 @@ void UEquipmentSlotWidget::SetItem(const FItemBaseRow& ItemRow)
 	// --- Подгоняем размер слота под размер предмета (клетки * CellSizePx) ---
 	if (SlotSizeBox)
 	{
-		const float W = static_cast<float>(ItemRow.GridSize.Width)  * CellSizePx;
-		const float H = static_cast<float>(ItemRow.GridSize.Height) * CellSizePx;
+		FItemSize Size = ItemRow.GridSize;
+		if (Size.Width <= 0 || Size.Height <= 0)
+		{
+			Size = UItemSizeRules::GetDefaultSize(ItemRow.ItemClass);
+		}
+
+		const float W = static_cast<float>(Size.Width)  * CellSizePx;
+		const float H = static_cast<float>(Size.Height) * CellSizePx;
 
 		SlotSizeBox->SetWidthOverride(W);
 		SlotSizeBox->SetHeightOverride(H);

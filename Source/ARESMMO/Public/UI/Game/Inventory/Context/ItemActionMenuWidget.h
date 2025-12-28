@@ -13,6 +13,7 @@ enum class EItemContextAction : uint8
 {
 	Equip          UMETA(DisplayName="Equip"),
 	Attach         UMETA(DisplayName="Attach"),
+	Detach         UMETA(DisplayName="Detach"),
 	Use            UMETA(DisplayName="Use"),
 	Study          UMETA(DisplayName="Learn"),
 	Drop           UMETA(DisplayName="Drop"),
@@ -36,6 +37,12 @@ public:
 	UFUNCTION(BlueprintCallable, Category="ARES|Inventory|ContextMenu")
 	void SetupForItem(const FItemBaseRow& ItemRow, bool bHasBattery, bool bHasAmmo, bool bHasRepairKit);
 
+	// Обновить варианты Detach по установленным модулям на оружии
+	UFUNCTION(BlueprintCallable, Category="ARES|Inventory|ContextMenu")
+	void SetDetachOptions(const TSet<EStoreSubCategory>& AvailableDetachOptions);
+
+	EStoreSubCategory ConsumePendingDetachSubCategory();
+
 	void SetOwnerInventory(UInventoryWidget* InOwner);
 
 protected:
@@ -47,6 +54,14 @@ protected:
 	// --- Buttons (BindWidgetOptional чтобы не падало если ты назовёшь по-другому) ---
 	UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_Equip = nullptr;
 	UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_Attach = nullptr;
+	UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_Detach = nullptr;
+	UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_Detach_Grip = nullptr;
+	UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_Detach_Scope = nullptr;
+	UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_Detach_Magazine = nullptr;
+	UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_Detach_Laser = nullptr;
+	UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_Detach_Flashlight = nullptr;
+	UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_Detach_Silencer = nullptr;
+	UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_Detach_Module = nullptr;
 	UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_Use = nullptr;
 	UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_Study = nullptr;
 	UPROPERTY(meta=(BindWidgetOptional)) UButton* Btn_Drop = nullptr;
@@ -56,6 +71,14 @@ protected:
 
 	UFUNCTION() void ClickEquip();
 	UFUNCTION() void ClickAttach();
+	UFUNCTION() void ClickDetach();
+	UFUNCTION() void ClickDetachGrip();
+	UFUNCTION() void ClickDetachScope();
+	UFUNCTION() void ClickDetachMagazine();
+	UFUNCTION() void ClickDetachLaser();
+	UFUNCTION() void ClickDetachFlashlight();
+	UFUNCTION() void ClickDetachSilencer();
+	UFUNCTION() void ClickDetachModule();
 	UFUNCTION() void ClickUse();
 	UFUNCTION() void ClickStudy();
 	UFUNCTION() void ClickDrop();
@@ -68,6 +91,13 @@ private:
 	void SetBtnEnabled(UButton* Btn, bool bEnabled);
 	void Fire(EItemContextAction Action);
 
+	void SetDetachButtonsVisible(bool bVisible);
+	void SetDetachButtonVisibleFor(EStoreSubCategory SubCategory, bool bVisible);
+	void QueueDetachAction(EStoreSubCategory SubCategory);
+
 	// Context Menu Close
 	TWeakObjectPtr<UInventoryWidget> OwnerInventoryWidget;
+
+	EStoreSubCategory PendingDetachSubCategory = EStoreSubCategory::None;
+	TSet<EStoreSubCategory> CachedDetachOptions;
 };

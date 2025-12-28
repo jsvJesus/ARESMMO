@@ -145,9 +145,6 @@ protected:
 
 	bool EquipWeaponActorToSlot(const FItemBaseRow& ItemRow, EEquipmentSlotType SlotType);
 	void DestroyWeaponActorInSlot(EEquipmentSlotType SlotType);
-
-	// Какое оружие считать "активным" для Attach (пока приоритет Weapon1->Weapon2->Pistol)
-	AWeaponBase* GetBestWeaponForAttachment() const;
 	
 	void SetSelectedWeaponInternal(AWeaponBase* NewWeapon);
 
@@ -158,6 +155,9 @@ public:
 	FORCEINLINE class USpringArmComponent* GetCameraBoom() const { return CameraBoom; }
 	FORCEINLINE class UCameraComponent* GetTPSCamera() const { return TPSCamera; }
 	FORCEINLINE class UCameraComponent* GetFPSCamera() const { return FPSCamera; }
+
+	// Какое оружие считать "активным" для Attach (пока приоритет Weapon1->Weapon2->Pistol)
+	AWeaponBase* GetBestWeaponForAttachment() const;
 
 	UFUNCTION(BlueprintPure, Category="ARES|Camera")
 	bool IsFirstPerson() const { return bIsFirstPerson; }
@@ -351,6 +351,9 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="ARES|Inventory|ContextMenu")
 	bool ContextMenu_Attach(FName InternalName, int32 FromCellX, int32 FromCellY);
+
+	UFUNCTION(BlueprintCallable, Category="ARES|Inventory|ContextMenu")
+	bool ContextMenu_Detach(FName InternalName, int32 FromCellX, int32 FromCellY);
 
 	UFUNCTION(BlueprintCallable, Category="ARES|Inventory|ContextMenu")
 	bool ContextMenu_Use(FName InternalName, int32 FromCellX, int32 FromCellY);

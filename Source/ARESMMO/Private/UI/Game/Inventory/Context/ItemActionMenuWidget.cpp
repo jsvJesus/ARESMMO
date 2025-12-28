@@ -8,6 +8,14 @@ void UItemActionMenuWidget::NativeConstruct()
 
 	if (Btn_Equip)          Btn_Equip->OnClicked.AddDynamic(this, &UItemActionMenuWidget::ClickEquip);
 	if (Btn_Attach)         Btn_Attach->OnClicked.AddDynamic(this, &UItemActionMenuWidget::ClickAttach);
+	if (Btn_Detach)         Btn_Detach->OnClicked.AddDynamic(this, &UItemActionMenuWidget::ClickDetach);
+	if (Btn_Detach_Grip)    Btn_Detach_Grip->OnClicked.AddDynamic(this, &UItemActionMenuWidget::ClickDetachGrip);
+	if (Btn_Detach_Scope)   Btn_Detach_Scope->OnClicked.AddDynamic(this, &UItemActionMenuWidget::ClickDetachScope);
+	if (Btn_Detach_Magazine) Btn_Detach_Magazine->OnClicked.AddDynamic(this, &UItemActionMenuWidget::ClickDetachMagazine);
+	if (Btn_Detach_Laser)   Btn_Detach_Laser->OnClicked.AddDynamic(this, &UItemActionMenuWidget::ClickDetachLaser);
+	if (Btn_Detach_Flashlight) Btn_Detach_Flashlight->OnClicked.AddDynamic(this, &UItemActionMenuWidget::ClickDetachFlashlight);
+	if (Btn_Detach_Silencer) Btn_Detach_Silencer->OnClicked.AddDynamic(this, &UItemActionMenuWidget::ClickDetachSilencer);
+	if (Btn_Detach_Module)  Btn_Detach_Module->OnClicked.AddDynamic(this, &UItemActionMenuWidget::ClickDetachModule);
 	if (Btn_Use)            Btn_Use->OnClicked.AddDynamic(this, &UItemActionMenuWidget::ClickUse);
 	if (Btn_Study)          Btn_Study->OnClicked.AddDynamic(this, &UItemActionMenuWidget::ClickStudy);
 	if (Btn_Drop)           Btn_Drop->OnClicked.AddDynamic(this, &UItemActionMenuWidget::ClickDrop);
@@ -53,6 +61,53 @@ void UItemActionMenuWidget::Fire(EItemContextAction Action)
 	OnActionSelected.Broadcast(Action);
 }
 
+void UItemActionMenuWidget::SetDetachButtonsVisible(bool bVisible)
+{
+	SetBtnVisible(Btn_Detach_Grip, bVisible && CachedDetachOptions.Contains(EStoreSubCategory::WeaponATTM_Grip));
+	SetBtnVisible(Btn_Detach_Scope, bVisible && CachedDetachOptions.Contains(EStoreSubCategory::WeaponATTM_Scope));
+	SetBtnVisible(Btn_Detach_Magazine, bVisible && CachedDetachOptions.Contains(EStoreSubCategory::WeaponATTM_Magazine));
+	SetBtnVisible(Btn_Detach_Laser, bVisible && CachedDetachOptions.Contains(EStoreSubCategory::WeaponATTM_Laser));
+	SetBtnVisible(Btn_Detach_Flashlight, bVisible && CachedDetachOptions.Contains(EStoreSubCategory::WeaponATTM_Flashlight));
+	SetBtnVisible(Btn_Detach_Silencer, bVisible && CachedDetachOptions.Contains(EStoreSubCategory::WeaponATTM_Silencer));
+	SetBtnVisible(Btn_Detach_Module, bVisible && CachedDetachOptions.Contains(EStoreSubCategory::WeaponATTM_Module));
+}
+
+void UItemActionMenuWidget::SetDetachButtonVisibleFor(EStoreSubCategory SubCategory, bool bVisible)
+{
+	switch (SubCategory)
+	{
+	case EStoreSubCategory::WeaponATTM_Grip:
+		SetBtnVisible(Btn_Detach_Grip, bVisible);
+		break;
+	case EStoreSubCategory::WeaponATTM_Scope:
+		SetBtnVisible(Btn_Detach_Scope, bVisible);
+		break;
+	case EStoreSubCategory::WeaponATTM_Magazine:
+		SetBtnVisible(Btn_Detach_Magazine, bVisible);
+		break;
+	case EStoreSubCategory::WeaponATTM_Laser:
+		SetBtnVisible(Btn_Detach_Laser, bVisible);
+		break;
+	case EStoreSubCategory::WeaponATTM_Flashlight:
+		SetBtnVisible(Btn_Detach_Flashlight, bVisible);
+		break;
+	case EStoreSubCategory::WeaponATTM_Silencer:
+		SetBtnVisible(Btn_Detach_Silencer, bVisible);
+		break;
+	case EStoreSubCategory::WeaponATTM_Module:
+		SetBtnVisible(Btn_Detach_Module, bVisible);
+		break;
+	default:
+		break;
+	}
+}
+
+void UItemActionMenuWidget::QueueDetachAction(EStoreSubCategory SubCategory)
+{
+	PendingDetachSubCategory = SubCategory;
+	Fire(EItemContextAction::Detach);
+}
+
 void UItemActionMenuWidget::SetupForItem(const FItemBaseRow& ItemRow, bool bHasBattery, bool bHasAmmo, bool bHasRepairKit)
 {
 	// Equip
@@ -82,6 +137,11 @@ void UItemActionMenuWidget::SetupForItem(const FItemBaseRow& ItemRow, bool bHasB
 		ItemRow.StoreCategory == EStoreCategory::storecat_GearATTM;
 
 	SetBtnVisible(Btn_Attach, bAttach);
+
+	// Detach (для weapon attachments: снимаем модуль соответствующего типа)
+	const bool bDetach = ItemRow.StoreCategory == EStoreCategory::storecat_WeaponATTM;
+	SetBtnVisible(Btn_Detach, bDetach);
+	SetDetachButtonsVisible(false);
 
 	// Use item
 	const bool bUse =
@@ -136,6 +196,24 @@ void UItemActionMenuWidget::SetupForItem(const FItemBaseRow& ItemRow, bool bHasB
 	SetBtnEnabled(Btn_Repair, bHasRepairKit);
 }
 
+void UItemActionMenuWidget::SetDetachOptions(const TSet<EStoreSubCategory>& AvailableDetachOptions)
+{
+	SetDetachButtonVisibleFor(EStoreSubCategory::WeaponATTM_Grip, CachedDetachOptions.Contains(EStoreSubCategory::WeaponATTM_Grip));
+	SetDetachButtonVisibleFor(EStoreSubCategory::WeaponATTM_Scope, CachedDetachOptions.Contains(EStoreSubCategory::WeaponATTM_Scope));
+	SetDetachButtonVisibleFor(EStoreSubCategory::WeaponATTM_Magazine, CachedDetachOptions.Contains(EStoreSubCategory::WeaponATTM_Magazine));
+	SetDetachButtonVisibleFor(EStoreSubCategory::WeaponATTM_Laser, CachedDetachOptions.Contains(EStoreSubCategory::WeaponATTM_Laser));
+	SetDetachButtonVisibleFor(EStoreSubCategory::WeaponATTM_Flashlight, CachedDetachOptions.Contains(EStoreSubCategory::WeaponATTM_Flashlight));
+	SetDetachButtonVisibleFor(EStoreSubCategory::WeaponATTM_Silencer, CachedDetachOptions.Contains(EStoreSubCategory::WeaponATTM_Silencer));
+	SetDetachButtonVisibleFor(EStoreSubCategory::WeaponATTM_Module, CachedDetachOptions.Contains(EStoreSubCategory::WeaponATTM_Module));
+}
+
+EStoreSubCategory UItemActionMenuWidget::ConsumePendingDetachSubCategory()
+{
+	const EStoreSubCategory Result = PendingDetachSubCategory;
+	PendingDetachSubCategory = EStoreSubCategory::None;
+	return Result;
+}
+
 void UItemActionMenuWidget::SetOwnerInventory(UInventoryWidget* InOwner)
 {
 	OwnerInventoryWidget = InOwner;
@@ -144,6 +222,14 @@ void UItemActionMenuWidget::SetOwnerInventory(UInventoryWidget* InOwner)
 // --- Clicks ---
 void UItemActionMenuWidget::ClickEquip()          { Fire(EItemContextAction::Equip); }
 void UItemActionMenuWidget::ClickAttach()         { Fire(EItemContextAction::Attach); }
+void UItemActionMenuWidget::ClickDetach()         { Fire(EItemContextAction::Detach); }
+void UItemActionMenuWidget::ClickDetachGrip()     { QueueDetachAction(EStoreSubCategory::WeaponATTM_Grip); }
+void UItemActionMenuWidget::ClickDetachScope()    { QueueDetachAction(EStoreSubCategory::WeaponATTM_Scope); }
+void UItemActionMenuWidget::ClickDetachMagazine() { QueueDetachAction(EStoreSubCategory::WeaponATTM_Magazine); }
+void UItemActionMenuWidget::ClickDetachLaser()    { QueueDetachAction(EStoreSubCategory::WeaponATTM_Laser); }
+void UItemActionMenuWidget::ClickDetachFlashlight() { QueueDetachAction(EStoreSubCategory::WeaponATTM_Flashlight); }
+void UItemActionMenuWidget::ClickDetachSilencer() { QueueDetachAction(EStoreSubCategory::WeaponATTM_Silencer); }
+void UItemActionMenuWidget::ClickDetachModule()   { QueueDetachAction(EStoreSubCategory::WeaponATTM_Module); }
 void UItemActionMenuWidget::ClickUse()            { Fire(EItemContextAction::Use); }
 void UItemActionMenuWidget::ClickStudy()          { Fire(EItemContextAction::Study); }
 void UItemActionMenuWidget::ClickDrop()           { Fire(EItemContextAction::Drop); }

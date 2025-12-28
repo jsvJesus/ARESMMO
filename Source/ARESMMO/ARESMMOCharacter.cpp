@@ -1264,6 +1264,7 @@ void AARESMMOCharacter::SwitchToFPS()
 	// --- Скрываем шмотку на голове только для камеры владельца (FPS) ---
 	HideForOwner(Mesh_Hair, true);
 	HideForOwner(Mesh_Beard, true);
+	HideForOwner(Mesh_Head, true);
 	HideForOwner(Mesh_Helmet, true);
 	HideForOwner(Mesh_Mask, true);
 }
@@ -1309,6 +1310,7 @@ void AARESMMOCharacter::SwitchToTPS()
 	// --- Возвращаем видимость для владельца (TPS) ---
 	HideForOwner(Mesh_Hair, false);
 	HideForOwner(Mesh_Beard, false);
+	HideForOwner(Mesh_Head, false);
 	HideForOwner(Mesh_Helmet, false);
 	HideForOwner(Mesh_Mask, false);
 }
@@ -2055,6 +2057,29 @@ bool AARESMMOCharacter::ContextMenu_Attach(FName InternalName, int32 FromCellX, 
 
 	// убираем аттач из инвентаря
 	InventoryItems.RemoveAt(Index);
+	RefreshInventoryUI();
+	return true;
+}
+
+bool AARESMMOCharacter::ContextMenu_Detach(FName InternalName, int32 FromCellX, int32 FromCellY)
+{
+	const int32 Index = FindInventoryIndexForAction(InventoryItems, InternalName, FromCellX, FromCellY);
+	if (Index == INDEX_NONE)
+		return false;
+
+	const FItemBaseRow ItemRow = InventoryItems[Index].ItemRow;
+	if (ItemRow.StoreCategory != EStoreCategory::storecat_WeaponATTM)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ContextMenu_Detach: not a weapon attachment: %s"), *ItemRow.InternalName.ToString());
+		return false;
+	}
+
+	if (!DetachWeaponATTMToInventory(ItemRow.StoreSubCategory))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("ContextMenu_Detach: detach failed: %s"), *ItemRow.InternalName.ToString());
+		return false;
+	}
+
 	RefreshInventoryUI();
 	return true;
 }
