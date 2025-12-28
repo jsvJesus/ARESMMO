@@ -190,6 +190,11 @@ public:
 	void StopSprint();
 
 	// ===== Modular Character Parts =====
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|HeroParts")
+	USkeletalMeshComponent* Mesh_Hair;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|HeroParts")
+	USkeletalMeshComponent* Mesh_Beard;
 	
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|HeroParts")
 	USkeletalMeshComponent* Mesh_Head;
@@ -204,7 +209,13 @@ public:
 	USkeletalMeshComponent* Mesh_Legs;
 
 	// Дефолтные меши для восстановления при снятии вещей
-    UPROPERTY()
+	UPROPERTY()
+	USkeletalMesh* DefaultHairMesh = nullptr;
+        
+	UPROPERTY()
+	USkeletalMesh* DefaultBeardMesh = nullptr;
+	
+	UPROPERTY()
     USkeletalMesh* DefaultHeadMesh = nullptr;
 
 	UPROPERTY()
@@ -257,6 +268,16 @@ public:
 
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|Movement")
 	float SprintStaminaCostPerSecond = 15.0f;
+
+	// ===== Sprint / Exhaustion =====
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|Movement|Stamina")
+	float MinStaminaPercentToSprint = 15.0f; // 15% = 15.0 (т.к. стамина 0..100)
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|Movement|Stamina")
+	float ExhaustedMaxWalkSpeed = 0.0f; // 0 = персонаж стоит, пока не восстановится
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|Movement|Stamina")
+	bool bIsExhausted = false;
 
 	// ===== UI / Game HUD =====
 	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="ARES|UI")
@@ -550,4 +571,7 @@ public:
 
 	FORCEINLINE float GetAnimDirectionAngle() const { return DirectionAngle; }
 	FORCEINLINE float GetAnimTurnRate() const { return TurnRate; }
+
+protected:
+	void SetExhausted(bool bNewExhausted);
 };

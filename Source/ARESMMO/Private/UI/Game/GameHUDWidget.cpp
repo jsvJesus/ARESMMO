@@ -2,6 +2,7 @@
 #include "Components/ProgressBar.h"
 #include "Components/Image.h"
 #include "Components/PlayerStatsComponent.h"
+#include "Components/TextBlock.h"
 #include "Libs/PlayerConditionLibrary.h"
 
 #include "GameFramework/Pawn.h"
@@ -97,6 +98,35 @@ void UGameHUDWidget::UpdateConditionIcons(float TimeSeconds)
 		UpdatePrimaryConditionIcon(WaterIcon, Stats->Secondary.Water, TimeSeconds);
 	}
 
+	auto SetPctText = [&](UTextBlock* Txt, float Percent)
+	{
+		if (!Txt) return;
+
+		const int32 Pct = FMath::Clamp(FMath::RoundToInt(Percent), 0, 100);
+		Txt->SetVisibility(ESlateVisibility::Visible);
+		Txt->SetText(FText::FromString(FString::Printf(TEXT("%d%%"), Pct)));
+
+		// По желанию: тот же цвет/мигание, что и иконка
+		FLinearColor Color = FLinearColor::White;
+		bool bBlink = false;
+		UPlayerConditionLibrary::GetSecondaryConditionIconParams(Percent, Color, bBlink);
+
+		Txt->SetColorAndOpacity(Color);
+
+		if (bBlink)
+		{
+			const float Alpha = UPlayerConditionLibrary::GetBlinkAlpha(TimeSeconds, 8.0f);
+			Txt->SetRenderOpacity(Alpha);
+		}
+		else
+		{
+			Txt->SetRenderOpacity(1.0f);
+		}
+	};
+
+	SetPctText(FoodPercentText, Stats->Secondary.Food);
+	SetPctText(WaterPercentText, Stats->Secondary.Water);
+
 	// ----- Вторичные статусы: Bleeding / Biohazard / PsyRad -----
 	if (BleedingIcon)
 	{
@@ -105,11 +135,9 @@ void UGameHUDWidget::UpdateConditionIcons(float TimeSeconds)
 
 	if (BiohazardIcon)
 	{
-		const float BioValue      = Stats->Secondary.Biohazard;   // внутреннее заражение
-		const float PoisonValue   = Stats->Ambient.Poisoning;     // внешнее отравление
-		const float CombinedValue = FMath::Max(BioValue, PoisonValue);
-
-		UpdateSecondaryConditionIcon(BiohazardIcon, CombinedValue, TimeSeconds);
+		const float BioValue    = Stats->Secondary.Biohazard;
+		const float PoisonValue = FMath::Max(Stats->Secondary.Poisoning, Stats->Ambient.Poisoning);
+		UpdateSecondaryConditionIcon(BiohazardIcon, FMath::Max(BioValue, PoisonValue), TimeSeconds);
 	}
 
 	if (PsyIcon)
@@ -121,7 +149,7 @@ void UGameHUDWidget::UpdateConditionIcons(float TimeSeconds)
 	if (ColdIcon)
 	{
 		// Cold сидит в Ambient
-		UpdateSecondaryConditionIcon(ColdIcon, Stats->Ambient.Cold, TimeSeconds);
+		UpdateSecondaryConditionIcon(ColdIcon, FMath::Max(Stats->Secondary.Cold, Stats->Ambient.Cold), TimeSeconds);
 	}
 
 	// ----- Ambient: Physical / Fire / Electric -> одна из трёх иконок -----
@@ -223,27 +251,12 @@ void UGameHUDWidget::UpdatePrimaryConditionIcon(UImage* Icon, float Percent, flo
 	}
 
 	FLinearColor Color = FLinearColor::White;
-	bool bVisible = false;
 	bool bShouldBlink = false;
-
-	// Food/Water — хотим включать иконку только при проблемах
-	UPlayerConditionLibrary::GetAmbientConditionIconParams(
-		Percent,
-		Color,
-		bVisible,
-		bShouldBlink
-	);
-
-	Icon->SetColorAndOpacity(Color);
-
-	if (!bVisible)
-	{
-		Icon->SetVisibility(ESlateVisibility::Hidden);
-		Icon->SetRenderOpacity(0.0f);
-		return;
-	}
+	
+	UPlayerConditionLibrary::GetSecondaryConditionIconParams(Percent, Color, bShouldBlink);
 
 	Icon->SetVisibility(ESlateVisibility::Visible);
+	Icon->SetColorAndOpacity(Color);
 
 	if (bShouldBlink)
 	{

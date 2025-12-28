@@ -6,40 +6,35 @@ void UPlayerConditionLibrary::GetSecondaryConditionIconParams(
 	bool& bOutShouldBlink
 )
 {
-	// Нормализуем на всякий пожарный
 	const float P = FMath::Clamp(Percent, 0.0f, 100.0f);
 
-	// 0% — серый, не мигает
-	if (P <= KINDA_SMALL_NUMBER)
+	// 0..25% — серый, НЕ мигает
+	if (P <= 25.0f)
 	{
 		OutColor = FLinearColor(0.3f, 0.3f, 0.3f, 1.0f); // серый
 		bOutShouldBlink = false;
 		return;
 	}
 
-	// Дальше — мигаем всегда
-	bOutShouldBlink = true;
-
-	// 0..25% — зелёный
-	if (P <= 25.0f)
+	// 25..60% — зелёный, мигает
+	if (P <= 60.0f)
 	{
 		OutColor = FLinearColor(0.0f, 1.0f, 0.0f, 1.0f); // зелёный
+		bOutShouldBlink = true;
+		return;
 	}
-	// 25..60% — жёлтый
-	else if (P <= 60.0f)
-	{
-		OutColor = FLinearColor(1.0f, 1.0f, 0.0f, 1.0f); // жёлтый
-	}
-	// 60..80% — оранжевый
-	else if (P <= 80.0f)
+
+	// 60..80% — оранжевый, мигает
+	if (P <= 80.0f)
 	{
 		OutColor = FLinearColor(1.0f, 0.5f, 0.0f, 1.0f); // оранжевый
+		bOutShouldBlink = true;
+		return;
 	}
-	// 80..100% — красный
-	else
-	{
-		OutColor = FLinearColor(1.0f, 0.0f, 0.0f, 1.0f); // красный
-	}
+
+	// 80..100% — красный, мигает
+	OutColor = FLinearColor(1.0f, 0.0f, 0.0f, 1.0f); // красный
+	bOutShouldBlink = true;
 }
 
 void UPlayerConditionLibrary::GetAmbientConditionIconParams(

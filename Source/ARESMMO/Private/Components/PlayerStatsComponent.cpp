@@ -211,6 +211,35 @@ void UPlayerStatsComponent::RestoreStamina(float DeltaTime)
 /* ====== Внутренняя логика ====== */
 void UPlayerStatsComponent::TickGoodBadStats(float DeltaTime)
 {
+	// ====== Рост голода/жажды со временем ======
+	if (bEnableNeeds)
+	{
+		float Mult = 1.0f;
+
+		if (const ACharacter* Ch = Cast<ACharacter>(GetOwner()))
+		{
+			if (const UCharacterMovementComponent* Move = Ch->GetCharacterMovement())
+			{
+				const float Speed2D = Move->Velocity.Size2D();
+
+				if (Speed2D > MoveSpeedThreshold)
+				{
+					Mult *= MoveNeedsMultiplier;
+				}
+
+				if (Move->MaxWalkSpeed > KINDA_SMALL_NUMBER &&
+					Speed2D > Move->MaxWalkSpeed * SprintSpeedRatioThreshold)
+				{
+					Mult *= SprintNeedsMultiplier;
+				}
+			}
+		}
+
+		AddFood((FoodIncreasePerMinute / 60.0f) * DeltaTime * Mult);
+		AddWater((WaterIncreasePerMinute / 60.0f) * DeltaTime * Mult);
+	}
+
+	// ====== Уурон при критических значениях ======
 	// 80%+ → наносим урон
 	// 60%+ → стамина не регенится
 	if (Secondary.Water >= 80.f)

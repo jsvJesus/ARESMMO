@@ -159,11 +159,14 @@ enum class EStoreSubCategory : uint8
 	WeaponATTM_Laser       UMETA(DisplayName="Laser"),
 	WeaponATTM_Flashlight  UMETA(DisplayName="Flashlight"),
 	WeaponATTM_Silencer    UMETA(DisplayName="Silencer / Compensator"),
+	WeaponATTM_Module	   UMETA(DisplayName="Module"),
 
 	// ===== storecat_GearATTM =====
 	GearATTM_NVG           UMETA(DisplayName="NVG"),
 	GearATTM_Headlamp      UMETA(DisplayName="Headlamp"),
 	GearATTM_Mask          UMETA(DisplayName="Mask Attachment"),
+	GearATTM_Belt          UMETA(DisplayName="Gear Belt"), // Для доп переносимого веса
+	GearATTM_Plate         UMETA(DisplayName="Gear Plate"), // Для усиления брони
 
 	// ===== storecat_Components =====
 	Item_Battery           UMETA(DisplayName="Battery"),
@@ -208,6 +211,27 @@ enum class EItemClass : uint8
 	Ammo          UMETA(DisplayName="Ammo"),
 	WeaponATTM    UMETA(DisplayName="Weapon Attachment"),
 	GearATTM      UMETA(DisplayName="Gear Attachment")
+};
+
+UENUM(BlueprintType)
+enum class EWeaponMagazineType : uint8
+{
+	None UMETA(DisplayName="None"),
+
+	// AK (пример)
+	AK_Mag_30   UMETA(DisplayName="AK Mag 30"),
+	AK_Mag_45   UMETA(DisplayName="AK Mag 45"),
+	AK_Mag_60   UMETA(DisplayName="AK Mag 60"),
+
+	// AKM (пример)
+	AKM_Mag_30  UMETA(DisplayName="AKM Mag 30"),
+	AKM_Mag_45  UMETA(DisplayName="AKM Mag 45"),
+	AKM_Mag_60  UMETA(DisplayName="AKM Mag 60"),
+
+	// STANAG (пример)
+	STANAG_Mag_30  UMETA(DisplayName="STANAG 30"),
+	STANAG_Mag_60  UMETA(DisplayName="STANAG 60"),
+	STANAG_Mag_100 UMETA(DisplayName="STANAG 100"),
 };
 
 static EEquipmentSlotType GetEquipmentSlotForCategory(EStoreCategory Category)

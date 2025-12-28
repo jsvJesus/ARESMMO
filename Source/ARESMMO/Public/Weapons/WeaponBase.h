@@ -8,7 +8,36 @@
 class USkeletalMeshComponent;
 class UStaticMeshComponent;
 class USceneComponent;
+class UWeaponAttachmentBase;
 class AARESMMOCharacter;
+
+USTRUCT(BlueprintType)
+struct FAttachedWeaponATTM
+{
+	GENERATED_BODY()
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	FItemBaseRow ItemRow;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UWeaponAttachmentBase> Logic = nullptr;
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly)
+	bool bValid = false;
+
+	void Set(const FItemBaseRow& InRow, UWeaponAttachmentBase* InLogic)
+	{
+		ItemRow = InRow;
+		Logic = InLogic;
+		bValid = true;
+	}
+
+	void Clear()
+	{
+		Logic = nullptr;
+		bValid = false;
+	}
+};
 
 USTRUCT(BlueprintType)
 struct FWeaponAttachmentSlotDef
@@ -56,13 +85,27 @@ public:
 	bool CanAcceptAttachment(const FItemBaseRow& AttachmentRow) const;
 
 	UFUNCTION(BlueprintCallable, Category="ARES|Weapon|Attachment")
-	bool AttachItem(const FItemBaseRow& AttachmentRow);
-
-	UFUNCTION(BlueprintCallable, Category="ARES|Weapon|Attachment")
 	bool DetachAttachment(EStoreSubCategory AttachmentSubCategory);
 
 	UFUNCTION(BlueprintCallable, Category="ARES|Weapon|Attachment")
 	FName GetSocketForAttachment(EStoreSubCategory AttachmentSubCategory) const;
+
+	// Один аттач на один StoreSubCategory (Scope/Grip/Laser/...)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Weapon|Attachments")
+	TMap<EStoreSubCategory, FAttachedWeaponATTM> AttachedATTM;
+
+	// ===== Mount / Platform flags (минимум для логики "ласточкин хвост") =====
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Mounts")
+	bool bIsAKFamilyWeapon = false;
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Mounts")
+	bool bHasTopRail = false; // Пикатинни сверху (если true — прицел можно без модуля)
+
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category="Weapon|Mounts")
+	bool bSupportsDovetailSideMount = false; // у АК обычно true
+
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="Weapon|Mounts")
+	bool bDovetailRailEnabled = false; // станет true когда установлен Module
 
 protected:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|Weapon")
@@ -104,4 +147,32 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="ARES|Weapon|Attach")
 	FName GetCharacterAttachSocket() const { return CharacterAttachSocket; }
+
+	/* ===== Attachments ===== */
+	// Отдельная проверка ItemRow.WeaponATTMClass
+	UFUNCTION(BlueprintCallable, Category="Weapon|Attachments")
+	bool CheckWeaponATTMClass(const FItemBaseRow& ItemRow, FString& OutFailReason) const;
+
+	// СreateAttachmentLogicFromItemRow()
+	UFUNCTION(BlueprintCallable, Category="Weapon|Attachments")
+	UWeaponAttachmentBase* CreateAttachmentLogicFromItemRow(const FItemBaseRow& ItemRow, FString& OutFailReason) const;
+
+	// helper
+	UFUNCTION(BlueprintCallable, Category="Weapon|Attachments")
+	bool HasAttachment(EStoreSubCategory SubCategory) const;
+
+	// Основная проверка, включая "2 одинаковых нельзя" + dovetail rule
+	UFUNCTION(BlueprintCallable, Category="Weapon|Attachments")
+	bool CanAttachATTMToWeapon(const FItemBaseRow& ItemRow, FString& OutFailReason) const;
+
+	// AttachATTMToWeapon()
+	UFUNCTION(BlueprintCallable, Category="Weapon|Attachments")
+	bool AttachATTMToWeapon(const FItemBaseRow& ItemRow, FString& OutFailReason);
+
+	// DetachATTMFromWeapon()
+	UFUNCTION(BlueprintCallable, Category="Weapon|Attachments")
+	bool DetachATTMFromWeapon(EStoreSubCategory SubCategory, FItemBaseRow& OutDetachedItemRow, FString& OutFailReason);
+
+	UFUNCTION(BlueprintCallable, Category="ARES|Attachment")
+	bool AttachItem(const FItemBaseRow& ItemRow);
 };

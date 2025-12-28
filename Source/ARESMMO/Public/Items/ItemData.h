@@ -7,6 +7,7 @@
 #include "ItemData.generated.h"
 
 class AWeaponBase;
+class UWeaponAttachmentBase;
 
 USTRUCT(BlueprintType)
 struct FConsumableEffects
@@ -197,6 +198,32 @@ public:
 	/** Заряд по умолчанию */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Charge")
 	int32 DefaultCharge = 0;
+
+	/** Использует ли предмет патроны (обычно только WeaponATTM_Magazine) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Ammo")
+	bool bUseAmmo = false;
+
+	/** Максимум патронов в магазине */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Ammo")
+	int32 MaxAmmo = 0;
+
+	/** Текущее кол-во патронов (инстанс в инвентаре) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Ammo")
+	int32 CurrAmmo = 0;
+
+	/** Какой тип патронов принимает магазин (Ammo_*). Если None — примет любой. */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Ammo",
+		meta=(EditCondition="bUseAmmo", EditConditionHides))
+	EStoreSubCategory AcceptedAmmoSubCategory = EStoreSubCategory::None;
+
+	/** Конкретный тип магазина (AK_Mag_30, STANAG_Mag_60 и т.д.) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="Config|Ammo",
+		meta=(EditCondition="bUseAmmo", EditConditionHides))
+	EWeaponMagazineType MagazineType = EWeaponMagazineType::None;
+
+	/** Класс логики для WeaponATTM (Magazine/Grip/Scope/...) */
+	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category="WeaponAttachment")
+	TSubclassOf<UWeaponAttachmentBase> WeaponATTMClass;
 
 	UPROPERTY(EditAnywhere, BlueprintReadOnly)
 	EHeroPartType HeroPartType = EHeroPartType::None;

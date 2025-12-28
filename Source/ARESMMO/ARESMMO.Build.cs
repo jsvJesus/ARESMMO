@@ -1,12 +1,14 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
-
 using UnrealBuildTool;
 
 public class ARESMMO : ModuleRules
 {
 	public ARESMMO(ReadOnlyTargetRules Target) : base(Target)
 	{
-		PrivateDependencyModuleNames.AddRange(new string[] { "AnimGraphRuntime" });
+		PrivateDependencyModuleNames.AddRange(new string[]
+		{
+			"AnimGraphRuntime", 
+			"UnrealEd", 
+		});
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
 		PublicDependencyModuleNames.AddRange(new string[]
@@ -19,7 +21,7 @@ public class ARESMMO : ModuleRules
 			"UMG",
 			"Slate",
 			"SlateCore",
-			"AnimGraphRuntime"
+			"AnimGraphRuntime",
 		});
 	}
 }

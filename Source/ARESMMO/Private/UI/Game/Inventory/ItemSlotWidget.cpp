@@ -132,16 +132,15 @@ void UItemSlotWidget::NativeOnMouseLeave(const FPointerEvent& InMouseEvent)
 
 // одна клетка = 64 px
 static constexpr float CELL_PX = 64.f;
-
 void UItemSlotWidget::InitItem(const FItemBaseRow& ItemRow, const FItemSize& GridSize, int32 InCellX, int32 InCellY, int32 InQuantity)
 {
-	CurrentItemRow   = ItemRow;
-	CachedItemRow    = ItemRow;
-	CachedSize       = GridSize;
-	CachedCellX      = InCellX;
-	CachedCellY      = InCellY;
-	CachedQuantity   = InQuantity;
-	
+	CurrentItemRow = ItemRow;
+	CachedItemRow  = ItemRow;
+	CachedSize     = GridSize;
+	CachedCellX    = InCellX;
+	CachedCellY    = InCellY;
+	CachedQuantity = InQuantity;
+
 	const int32 W = GridSize.Width;
 	const int32 H = GridSize.Height;
 
@@ -150,23 +149,18 @@ void UItemSlotWidget::InitItem(const FItemBaseRow& ItemRow, const FItemSize& Gri
 	{
 		if (UTexture2D* BG = GetBackgroundTexture(GridSize))
 		{
-			UE_LOG(LogTemp, Log, TEXT("BG loaded: %s"), *BG->GetName());
 			BackgroundImage->SetBrushFromTexture(BG, true);
-		}
-		else
-		{
-			UE_LOG(LogTemp, Warning, TEXT("BG tex not found for %dx%d"), W, H);
 		}
 
 		FSlateBrush Brush = BackgroundImage->GetBrush();
 		Brush.ImageSize = FVector2D(W * CELL_PX, H * CELL_PX);
 		BackgroundImage->SetBrush(Brush);
 
-		// делаем фон полностью непрозрачным, чтобы убить сетку сзади
+		// фон непрозрачный, чтобы не просвечивала сетка
 		BackgroundImage->SetColorAndOpacity(FLinearColor(1.f, 1.f, 1.f, 1.f));
 	}
 
-	// ---------- ИКОНКА ПРЕДМЕТА ----------
+	// ---------- ИКОНКА ----------
 	if (IconImage)
 	{
 		if (!ItemRow.Icon.IsNull())
@@ -179,132 +173,209 @@ void UItemSlotWidget::InitItem(const FItemBaseRow& ItemRow, const FItemSize& Gri
 				IconBrush.ImageSize = FVector2D(W * CELL_PX, H * CELL_PX);
 				IconImage->SetBrush(IconBrush);
 			}
-			else
-			{
-				UE_LOG(LogTemp, Warning, TEXT("ItemSlotWidget: Icon load failed for %s"),
-					*ItemRow.InternalName.ToString());
-			}
+		}
+	}
+
+	// ---------- ТЕКСТЫ ----------
+	auto SetTextOrCollapse = [](UTextBlock* TB, const FText& Text)
+	{
+		if (!TB) return;
+		if (Text.IsEmpty())
+		{
+			TB->SetText(FText::GetEmpty());
+			TB->SetVisibility(ESlateVisibility::Collapsed);
 		}
 		else
 		{
-			UE_LOG(LogTemp, Warning, TEXT("ItemSlotWidget: Icon is NULL for %s"),
-				*ItemRow.InternalName.ToString());
+			TB->SetText(Text);
+			TB->SetVisibility(ESlateVisibility::HitTestInvisible);
 		}
+	};
+
+	const int32 Qty = FMath::Max(1, InQuantity);
+	const EStoreCategory    Cat = ItemRow.StoreCategory;
+	const EStoreSubCategory Sub = ItemRow.StoreSubCategory;
+
+	// --- Типы ---
+	const bool bIsMagazine  = (Sub == EStoreSubCategory::WeaponATTM_Magazine);
+	const bool bIsRepairKit = (Sub == EStoreSubCategory::Item_RapairKit);
+	const bool bIsBattery   = (Sub == EStoreSubCategory::Item_Battery);
+
+	// Батарейные (проценты)
+	const bool bBatteryLike =
+		(Cat == EStoreCategory::storecat_UsableItem) ||
+		(Sub == EStoreSubCategory::Usable_PDA) ||
+		(Sub == EStoreSubCategory::Usable_Detector) ||
+		(Sub == EStoreSubCategory::WeaponATTM_Laser) ||
+		(Sub == EStoreSubCategory::WeaponATTM_Flashlight) ||
+		(Sub == EStoreSubCategory::GearATTM_NVG) ||
+		(Sub == EStoreSubCategory::GearATTM_Headlamp) ||
+		bIsBattery;
+
+	// --- Категории “прочность + вес” ---
+	auto IsDurabilityCategory = [](EStoreCategory InCat) -> bool
+	{
+		switch (InCat)
+		{
+		case EStoreCategory::storecat_ASR:
+		case EStoreCategory::storecat_SNP:
+		case EStoreCategory::storecat_SHTG:
+		case EStoreCategory::storecat_HG:
+		case EStoreCategory::storecat_MG:
+		case EStoreCategory::storecat_SMG:
+		case EStoreCategory::storecat_MELEE:
+		case EStoreCategory::storecat_Armor:
+		case EStoreCategory::storecat_Helmet:
+		case EStoreCategory::storecat_PlaceItem:
+		case EStoreCategory::storecat_CraftItems:
+			return true;
+		default:
+			return false;
+		}
+	};
+
+	const bool bShowDurability =
+		IsDurabilityCategory(Cat) &&
+		ItemRow.bUseDurability &&
+		ItemRow.MaxDurability > 0;
+
+	// ---------- QUANTITY (в слоте используем NameText как "xN") ----------
+	bool bShowQuantity = false;
+
+	// Backpack: только стек, вес НЕ показываем
+	if (Cat == EStoreCategory::storecat_Backpack)
+	{
+		bShowQuantity = true;
+	}
+	// Кол-во + вес
+	else if (Cat == EStoreCategory::storecat_HeroParts ||
+			 Cat == EStoreCategory::storecat_Mask ||
+			 Cat == EStoreCategory::storecat_Grenade ||
+			 Cat == EStoreCategory::storecat_Medicine ||
+			 Cat == EStoreCategory::storecat_Food ||
+			 Cat == EStoreCategory::storecat_Water ||
+			 Cat == EStoreCategory::storecat_Components ||
+			 Cat == EStoreCategory::storecat_CraftRecipes ||
+			 Cat == EStoreCategory::storecat_Ammo)
+	{
+		bShowQuantity = true;
+	}
+	// Attachments: кол-во только если НЕ батарейные и НЕ магазин/не ремкит
+	else if ((Cat == EStoreCategory::storecat_WeaponATTM || Cat == EStoreCategory::storecat_GearATTM) &&
+		     !bBatteryLike && !bIsMagazine && !bIsRepairKit)
+	{
+		bShowQuantity = true;
 	}
 
-	// ---------- ИМЯ ПРЕДМЕТА ----------
+	// Магазин: если пустой — показываем стек (xN), если есть патроны — стек скрываем
+	if (bIsMagazine && ItemRow.bUseAmmo && ItemRow.MaxAmmo > 0)
+	{
+		const bool bHasAmmo = (ItemRow.CurrAmmo > 0);
+		bShowQuantity = !bHasAmmo;
+	}
+
+	// “прочность+вес” — количество не показываем
+	if (bShowDurability)
+	{
+		bShowQuantity = false;
+	}
+
+	// Пустой магазин и Qty=1 — нет смысла показывать "x1"
+	if (bShowQuantity && Qty <= 1)
+	{
+		// оставим так: x1 можно скрыть
+		// bShowQuantity = false;
+	}
+
+	// ---------- WEIGHT ----------
+	bool bShowWeight = ItemRow.bUseWeight && (Cat != EStoreCategory::storecat_Backpack);
+	const float UnitWeight  = ItemRow.GetUnitWeightKg();
+	const float TotalWeight = UnitWeight * static_cast<float>(Qty);
+
+	// ---------- APPLY: NameText (xN) ----------
 	if (NameText)
 	{
-		NameText->SetText(ItemRow.DisplayName);
+		SetTextOrCollapse(NameText, bShowQuantity ? FText::FromString(FString::Printf(TEXT("x%d"), Qty)) : FText::GetEmpty());
 	}
 
-	// ---------- ВЕС ПРЕДМЕТА (с учётом MaxStackSize там, где надо) ----------
+	// ---------- APPLY: WeightText ----------
 	if (WeightText)
 	{
-		float EffectiveWeight = ItemRow.Weight;
-
-		// Категории, где используем MaxStackSize
-		switch (ItemRow.StoreCategory)
+		if (bShowWeight && TotalWeight > 0.f)
 		{
-		case EStoreCategory::storecat_Backpack:
-		case EStoreCategory::storecat_Grenade:
-		case EStoreCategory::storecat_Medicine:
-		case EStoreCategory::storecat_Food:
-		case EStoreCategory::storecat_Water:
-		case EStoreCategory::storecat_Components:
-		case EStoreCategory::storecat_CraftRecipes:
-		case EStoreCategory::storecat_CraftItems:
-		case EStoreCategory::storecat_Ammo:
-		case EStoreCategory::storecat_WeaponATTM:
-		case EStoreCategory::storecat_GearATTM:
-			EffectiveWeight = ItemRow.Weight * FMath::Max(1, ItemRow.MaxStackSize);
-			break;
-
-		default:
-			// для всего остального – вес одного предмета
-			break;
+			SetTextOrCollapse(WeightText, FText::FromString(FString::Printf(TEXT("%.2f kg"), TotalWeight)));
 		}
-
-		const FString WeightStr = FString::Printf(TEXT("%.1f"), EffectiveWeight);
-		WeightText->SetText(FText::FromString(WeightStr));
+		else
+		{
+			SetTextOrCollapse(WeightText, FText::GetEmpty());
+		}
 	}
 
-	// ---------- ПРОЧНОСТЬ ПРЕДМЕТА (Durability %) ----------
-	const bool bUsesDurability =
-		(ItemRow.StoreCategory == EStoreCategory::storecat_Armor  ||
-		 ItemRow.StoreCategory == EStoreCategory::storecat_Helmet ||
-		 ItemRow.StoreCategory == EStoreCategory::storecat_Mask   ||
-		 ItemRow.StoreCategory == EStoreCategory::storecat_ASR    ||
-		 ItemRow.StoreCategory == EStoreCategory::storecat_SNP    ||
-		 ItemRow.StoreCategory == EStoreCategory::storecat_SHTG   ||
-		 ItemRow.StoreCategory == EStoreCategory::storecat_HG     ||
-		 ItemRow.StoreCategory == EStoreCategory::storecat_MG     ||
-		 ItemRow.StoreCategory == EStoreCategory::storecat_SMG    ||
-		 ItemRow.StoreCategory == EStoreCategory::storecat_MELEE  ||
-		 ItemRow.StoreCategory == EStoreCategory::storecat_CraftItems ||
-		 ItemRow.StoreCategory == EStoreCategory::storecat_PlaceItem);
-
+	// ---------- APPLY: Durability % ----------
 	if (ConditionText)
 	{
-		if (bUsesDurability && ItemRow.MaxDurability > 0)
+		if (bShowDurability)
 		{
 			const int32 Current = ItemRow.DefaultDurability;
 			const int32 Max     = ItemRow.MaxDurability;
 
-			const float Pct    = static_cast<float>(Current) / static_cast<float>(Max);
-			const int32 PctInt = FMath::RoundToInt(Pct * 100.f);
+			const float Pct    = (Max > 0) ? (static_cast<float>(Current) / static_cast<float>(Max)) : 0.f;
+			const int32 PctInt = FMath::Clamp(FMath::RoundToInt(Pct * 100.f), 0, 100);
 
-			ConditionText->SetText(FText::FromString(
-				FString::Printf(TEXT("%d%%"), PctInt)));
+			SetTextOrCollapse(ConditionText, FText::FromString(FString::Printf(TEXT("%d%%"), PctInt)));
 
-			// Цвет через библиотеку (порогa из ItemConditionLibrary)
-			const EItemConditionState State =
-				UItemConditionLibrary::GetConditionStateFromValues(Current, Max);
-
-			const FLinearColor Color =
-				UItemConditionLibrary::GetConditionColor(State);
-
-			ConditionText->SetColorAndOpacity(Color);
+			const EItemConditionState State = UItemConditionLibrary::GetConditionStateFromValues(Current, Max);
+			ConditionText->SetColorAndOpacity(UItemConditionLibrary::GetConditionColor(State));
 		}
 		else
 		{
-			ConditionText->SetText(FText::GetEmpty());
+			SetTextOrCollapse(ConditionText, FText::GetEmpty());
 		}
 	}
 
-	// ---------- ЗАРЯД ПРЕДМЕТА (Charge %) по подкатегориям ----------
-	const bool bUsesCharge =
-		(ItemRow.StoreSubCategory == EStoreSubCategory::Usable_PDA          ||
-		 ItemRow.StoreSubCategory == EStoreSubCategory::Usable_Detector    ||
-		 ItemRow.StoreSubCategory == EStoreSubCategory::WeaponATTM_Laser   ||
-		 ItemRow.StoreSubCategory == EStoreSubCategory::WeaponATTM_Flashlight ||
-		 ItemRow.StoreSubCategory == EStoreSubCategory::GearATTM_NVG       ||
-		 ItemRow.StoreSubCategory == EStoreSubCategory::GearATTM_Headlamp);
-
+	// ---------- APPLY: Ammo / Charge ----------
 	if (ChargeText)
 	{
-		if (bUsesCharge && ItemRow.MaxCharge > 0)
+		// Magazine: Ammo X/Y (только если есть патроны > 0)
+		if (bIsMagazine && ItemRow.bUseAmmo && ItemRow.MaxAmmo > 0)
+		{
+			if (ItemRow.CurrAmmo > 0)
+			{
+				const int32 Current = ItemRow.CurrAmmo;
+				const int32 Max     = ItemRow.MaxAmmo;
+
+				SetTextOrCollapse(ChargeText, FText::FromString(FString::Printf(TEXT("%d/%d"), Current, Max)));
+
+				const EItemConditionState State = UItemConditionLibrary::GetConditionStateFromValues(Current, Max);
+				ChargeText->SetColorAndOpacity(UItemConditionLibrary::GetConditionColor(State));
+			}
+			else
+			{
+				SetTextOrCollapse(ChargeText, FText::GetEmpty());
+			}
+		}
+		// RepairKit: uses (число)
+		else if (bIsRepairKit && ItemRow.bUseCharge && ItemRow.MaxCharge > 0)
+		{
+			SetTextOrCollapse(ChargeText, FText::AsNumber(ItemRow.DefaultCharge));
+		}
+		// Battery-like: percent 0..100
+		else if (bBatteryLike && ItemRow.bUseCharge && ItemRow.MaxCharge > 0)
 		{
 			const int32 Current = ItemRow.DefaultCharge;
 			const int32 Max     = ItemRow.MaxCharge;
 
 			const float Pct    = static_cast<float>(Current) / static_cast<float>(Max);
-			const int32 PctInt = FMath::RoundToInt(Pct * 100.f);
+			const int32 PctInt = FMath::Clamp(FMath::RoundToInt(Pct * 100.f), 0, 100);
 
-			ChargeText->SetText(FText::FromString(
-				FString::Printf(TEXT("%d%%"), PctInt)));
+			SetTextOrCollapse(ChargeText, FText::FromString(FString::Printf(TEXT("%d%%"), PctInt)));
 
-			const EItemConditionState State =
-				UItemConditionLibrary::GetConditionStateFromValues(Current, Max);
-
-			const FLinearColor Color =
-				UItemConditionLibrary::GetConditionColor(State);
-
-			ChargeText->SetColorAndOpacity(Color);
+			const EItemConditionState State = UItemConditionLibrary::GetConditionStateFromValues(Current, Max);
+			ChargeText->SetColorAndOpacity(UItemConditionLibrary::GetConditionColor(State));
 		}
 		else
 		{
-			ChargeText->SetText(FText::GetEmpty());
+			SetTextOrCollapse(ChargeText, FText::GetEmpty());
 		}
 	}
 }

@@ -183,6 +183,15 @@ static int32 FindAnyAmmoIndex(const TArray<FInventoryItemEntry>& Items)
 	});
 }
 
+static int32 FindAmmoIndexBySubCategory(const TArray<FInventoryItemEntry>& Items, EStoreSubCategory AmmoSubCat)
+{
+	return Items.IndexOfByPredicate([&](const FInventoryItemEntry& E)
+	{
+		return (E.ItemRow.StoreCategory == EStoreCategory::storecat_Ammo) &&
+			   (E.ItemRow.StoreSubCategory == AmmoSubCat);
+	});
+}
+
 //////////////////////////////////////////////////////////////////////////
 // AARESMMOCharacter
 AARESMMOCharacter::AARESMMOCharacter()
@@ -230,6 +239,14 @@ AARESMMOCharacter::AARESMMOCharacter()
 	TPSCamera->bUsePawnControlRotation = false; // Camera does not rotate relative to arm
 
 	// ===== Create Modular Meshes =====
+	Mesh_Hair = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Mesh_Hair")); // Hair
+	Mesh_Hair->SetupAttachment(GetMesh());
+	Mesh_Hair->SetLeaderPoseComponent(GetMesh());
+
+	Mesh_Beard = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Mesh_Beard")); // Beard
+	Mesh_Beard->SetupAttachment(GetMesh());
+	Mesh_Beard->SetLeaderPoseComponent(GetMesh());
+	
 	Mesh_Head = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Mesh_Head")); // Head
 	Mesh_Head->SetupAttachment(GetMesh());
 	Mesh_Head->SetLeaderPoseComponent(GetMesh());
@@ -265,7 +282,7 @@ AARESMMOCharacter::AARESMMOCharacter()
 
 	// Create a FPS Camera
 	FPSCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FPSCamera"));
-	FPSCamera->SetupAttachment(GetMesh(), TEXT("head")); // имя сокета головы своё
+	FPSCamera->SetupAttachment(GetMesh(), TEXT("head")); // имя сокета головы
 	FPSCamera->bUsePawnControlRotation = true;
 
 	if (TPSCamera)
@@ -330,6 +347,14 @@ void AARESMMOCharacter::BeginPlay()
 	}
 
 	// Кешируем стандартные меши героя
+	if (Mesh_Hair)
+	{
+		DefaultHairMesh = Mesh_Hair->GetSkeletalMeshAsset();
+	}
+	if (Mesh_Beard)
+	{
+		DefaultBeardMesh = Mesh_Beard->GetSkeletalMeshAsset();
+	}
 	if (Mesh_Head)
 	{
 		DefaultHeadMesh = Mesh_Head->GetSkeletalMeshAsset();
@@ -407,14 +432,31 @@ void AARESMMOCharacter::Tick(float DeltaSeconds)
 
 	UpdateAnimMovementData(DeltaSeconds);
 
+	if (!Stats)
+	{
+		return;
+	}
+
+	// Если вымотан — стоим, пока стамина не восстановится до 15%
+	if (bIsExhausted)
+	{
+		if (Stats->Base.Stamina >= MinStaminaPercentToSprint)
+		{
+			SetExhausted(false);
+		}
+		return;
+	}
+
 	// --------- Стамина от спринта ---------
-	if (bIsSprinting && Stats)
+	if (bIsSprinting)
 	{
 		Stats->ConsumeStamina(SprintStaminaCostPerSecond * DeltaSeconds);
 
 		if (Stats->Base.Stamina <= 0.f)
 		{
+			// В 0 — стоп и блок движения до 15%
 			StopSprint();
+			SetExhausted(true);
 		}
 	}
 }
@@ -574,19 +616,6 @@ void AARESMMOCharacter::Move(const FInputActionValue& Value)
 		AddMovementInput(RightDirection,   MovementVector.X);
 	}
 }
-
-/*void AARESMMOCharacter::Look(const FInputActionValue& Value)
-{
-	// input is a Vector2D
-	FVector2D LookAxisVector = Value.Get<FVector2D>();
-
-	if (Controller != nullptr)
-	{
-		// add yaw and pitch input to controller
-		AddControllerYawInput(LookAxisVector.X);
-		AddControllerPitchInput(LookAxisVector.Y);
-	}
-}*/
 
 void AARESMMOCharacter::Look(const FInputActionValue& Value)
 {
@@ -1076,8 +1105,41 @@ EWeaponState AARESMMOCharacter::GetWeaponStateForCategory(EStoreCategory Categor
 	return ::GetWeaponStateForCategory(Category);
 }
 
+void AARESMMOCharacter::SetExhausted(bool bNewExhausted)
+{
+	if (bIsExhausted == bNewExhausted)
+	{
+		return;
+	}
+
+	bIsExhausted = bNewExhausted;
+
+	if (UCharacterMovementComponent* Move = GetCharacterMovement())
+	{
+		Move->StopMovementImmediately();
+
+		if (bIsExhausted)
+		{
+			// Спринт гасим и фиксируем скорость в 0 
+			bIsSprinting = false;
+			Move->MaxWalkSpeed = ExhaustedMaxWalkSpeed;
+		}
+		else
+		{
+			// Возврат к нормальной скорости
+			const bool bIsCrouchedNow = Move->IsCrouching();
+			Move->MaxWalkSpeed = bIsCrouchedNow ? CrouchSpeed : WalkSpeed;
+		}
+	}
+}
+
 void AARESMMOCharacter::StartSprint()
 {
+	if (bIsExhausted)
+	{
+		return;
+	}
+
 	if (UCharacterMovementComponent* Move = GetCharacterMovement())
 	{
 		if (Move->IsCrouching())
@@ -1088,8 +1150,8 @@ void AARESMMOCharacter::StartSprint()
 		// Проверка статов
 		if (Stats)
 		{
-			// если нет стамины — не бежать
-			if (Stats->Base.Stamina <= 0.f)
+			// пока стамина < 15% — спринт запрещён
+			if (Stats->Base.Stamina < MinStaminaPercentToSprint)
 			{
 				return;
 			}
@@ -1100,7 +1162,7 @@ void AARESMMOCharacter::StartSprint()
 				return;
 			}
 		}
-		
+
 		bIsSprinting = true;
 		Move->MaxWalkSpeed = SprintSpeed;
 	}
@@ -1111,6 +1173,13 @@ void AARESMMOCharacter::StopSprint()
 	if (UCharacterMovementComponent* Move = GetCharacterMovement())
 	{
 		bIsSprinting = false;
+
+		// если вымотан — оставляем скорость 0 (или ExhaustedMaxWalkSpeed)
+		if (bIsExhausted)
+		{
+			Move->MaxWalkSpeed = ExhaustedMaxWalkSpeed;
+			return;
+		}
 
 		// возвращаем обычную скорость (walk или crouch)
 		const bool bIsCrouchedNow = Move->IsCrouching();
@@ -1155,6 +1224,8 @@ void AARESMMOCharacter::SwitchToFPS()
 
 	// --- Скрываем шмотку на голове только для камеры владельца (FPS) ---
 	//HideForOwner(Mesh_Head, true);
+	HideForOwner(Mesh_Hair, true);
+	HideForOwner(Mesh_Beard, true);
 	HideForOwner(Mesh_Helmet, true);
 	HideForOwner(Mesh_Mask, true);
 }
@@ -1199,6 +1270,8 @@ void AARESMMOCharacter::SwitchToTPS()
 
 	// --- Возвращаем видимость для владельца (TPS) ---
 	//HideForOwner(Mesh_Head, false);
+	HideForOwner(Mesh_Hair, false);
+	HideForOwner(Mesh_Beard, false);
 	HideForOwner(Mesh_Helmet, false);
 	HideForOwner(Mesh_Mask, false);
 }
@@ -2093,21 +2166,33 @@ bool AARESMMOCharacter::ContextMenu_ChargeMagazine(FName InternalName, int32 Fro
 		return false;
 	}
 
-	if (!Mag.ItemRow.bUseCharge || Mag.ItemRow.MaxCharge <= 0)
+	// Магазин теперь использует AMMO
+	if (!Mag.ItemRow.bUseAmmo || Mag.ItemRow.MaxAmmo <= 0)
 	{
 		return false;
 	}
 
-	const int32 Need = FMath::Max(0, Mag.ItemRow.MaxCharge - Mag.ItemRow.DefaultCharge);
+	const int32 Need = FMath::Max(0, Mag.ItemRow.MaxAmmo - Mag.ItemRow.CurrAmmo);
 	if (Need <= 0)
 	{
-		return true;
+		return true; // уже полный
 	}
 
-	const int32 AmmoIndex = FindAnyAmmoIndex(InventoryItems);
+	const EStoreSubCategory NeedAmmoType = Mag.ItemRow.AcceptedAmmoSubCategory;
+	int32 AmmoIndex = INDEX_NONE;
+
+	if (NeedAmmoType != EStoreSubCategory::None)
+	{
+		AmmoIndex = FindAmmoIndexBySubCategory(InventoryItems, NeedAmmoType);
+	}
+	else
+	{
+		AmmoIndex = FindAnyAmmoIndex(InventoryItems); // fallback
+	}
+
 	if (AmmoIndex == INDEX_NONE)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("ContextMenu_ChargeMagazine: no ammo"));
+		UE_LOG(LogTemp, Warning, TEXT("ContextMenu_ChargeMagazine: no ammo for type=%d"), (int32)NeedAmmoType);
 		return false;
 	}
 
@@ -2116,7 +2201,7 @@ bool AARESMMOCharacter::ContextMenu_ChargeMagazine(FName InternalName, int32 Fro
 	const int32 Have = Ammo.ItemRow.bUseStack ? FMath::Max(0, Ammo.Quantity) : 1;
 	const int32 Take = FMath::Min(Need, Have);
 
-	Mag.ItemRow.DefaultCharge += Take;
+	Mag.ItemRow.CurrAmmo += Take;
 
 	// consume ammo
 	if (Ammo.ItemRow.bUseStack)

@@ -8,6 +8,7 @@ class UProgressBar;
 class UPlayerStatsComponent;
 class APawn;
 class UImage;
+class UTextBlock;
 
 UCLASS()
 class ARESMMO_API UGameHUDWidget : public UUserWidget
@@ -58,6 +59,13 @@ protected:
 
 	UPROPERTY(meta = (BindWidgetOptional))
 	UImage* AmbientElectricIcon;
+
+	// Debug Text
+	UPROPERTY(meta=(BindWidgetOptional))
+	UTextBlock* FoodPercentText;
+
+	UPROPERTY(meta=(BindWidgetOptional))
+	UTextBlock* WaterPercentText;
 
 	// Кэш статов
 	UPROPERTY()

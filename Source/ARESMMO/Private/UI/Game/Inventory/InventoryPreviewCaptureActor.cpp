@@ -1,5 +1,4 @@
 #include "UI/Game/Inventory/InventoryPreviewCaptureActor.h"
-
 #include "Components/SceneCaptureComponent2D.h"
 #include "Components/SceneComponent.h"
 #include "Engine/TextureRenderTarget2D.h"

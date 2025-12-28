@@ -136,6 +136,30 @@ public:
 	UFUNCTION(BlueprintCallable, Category="Stats")
 	void RestoreStamina(float DeltaTime);
 
+	// ===== Needs (Food/Water grow over time) =====
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Stats|Needs")
+	bool bEnableNeeds = true;
+
+	// Сколько % в минуту набегает (0..100)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Stats|Needs", meta=(ClampMin="0.0"))
+	float FoodIncreasePerMinute = 1.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Stats|Needs", meta=(ClampMin="0.0"))
+	float WaterIncreasePerMinute = 1.5f;
+
+	// Множители, если персонаж двигается/бежит
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Stats|Needs", meta=(ClampMin="1.0"))
+	float MoveNeedsMultiplier = 1.25f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Stats|Needs", meta=(ClampMin="1.0"))
+	float SprintNeedsMultiplier = 1.75f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Stats|Needs", meta=(ClampMin="0.0"))
+	float MoveSpeedThreshold = 10.0f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category="Stats|Needs", meta=(ClampMin="0.0", ClampMax="1.0"))
+	float SprintSpeedRatioThreshold = 0.75f;
+
 private:
 	void TickGoodBadStats(float DeltaTime);  // Food / Water
 	void TickAmbient(float DeltaTime);       // Electro, Fire, Cold, Poisoning
