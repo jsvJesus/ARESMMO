@@ -158,7 +158,7 @@ enum class EStoreSubCategory : uint8
 	WeaponATTM_Magazine    UMETA(DisplayName="Magazine"),
 	WeaponATTM_Laser       UMETA(DisplayName="Laser"),
 	WeaponATTM_Flashlight  UMETA(DisplayName="Flashlight"),
-	WeaponATTM_Silencer    UMETA(DisplayName="Silencer / Compensator"),
+	WeaponATTM_Silencer    UMETA(DisplayName="Muzzle"),
 	WeaponATTM_Module	   UMETA(DisplayName="Module"),
 
 	// ===== storecat_GearATTM =====

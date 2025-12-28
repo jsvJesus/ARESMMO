@@ -282,8 +282,25 @@ AARESMMOCharacter::AARESMMOCharacter()
 
 	// Create a FPS Camera
 	FPSCamera = CreateDefaultSubobject<UCameraComponent>(TEXT("FPSCamera"));
-	FPSCamera->SetupAttachment(GetMesh(), TEXT("head")); // имя сокета головы
+	FPSCamera->SetupAttachment(GetMesh());
+	FPSCamera->SetRelativeLocation(FPSCameraLocalOffset);
+	FPSCamera->SetRelativeRotation(FPSCameraLocalRotation);
 	FPSCamera->bUsePawnControlRotation = true;
+
+	Mesh_FPS_Hand = CreateDefaultSubobject<USkeletalMeshComponent>(TEXT("Mesh_FPS_Hand"));
+	Mesh_FPS_Hand->SetupAttachment(FPSCamera);
+	Mesh_FPS_Hand->SetRelativeLocation(FVector::ZeroVector);
+	Mesh_FPS_Hand->SetRelativeRotation(FRotator::ZeroRotator);
+	Mesh_FPS_Hand->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Mesh_FPS_Hand->SetGenerateOverlapEvents(false);
+	Mesh_FPS_Hand->bReceivesDecals = false;
+	Mesh_FPS_Hand->CastShadow = false;
+	Mesh_FPS_Hand->bCastDynamicShadow = false;
+	Mesh_FPS_Hand->SetOnlyOwnerSee(true);
+	Mesh_FPS_Hand->SetOwnerNoSee(false);
+	Mesh_FPS_Hand->SetVisibility(false, true);
+	Mesh_FPS_Hand->bUseAttachParentBound = true;
+	Mesh_FPS_Hand->SetLeaderPoseComponent(GetMesh());
 
 	if (TPSCamera)
 	{
@@ -362,6 +379,10 @@ void AARESMMOCharacter::BeginPlay()
 	if (Mesh_Hand)
 	{
 		DefaultHandMesh = Mesh_Hand->GetSkeletalMeshAsset();
+	}
+	if (Mesh_FPS_Hand)
+	{
+		DefaultFPSHandMesh = Mesh_FPS_Hand->GetSkeletalMeshAsset();
 	}
 	if (Mesh_Body)
 	{
@@ -684,10 +705,54 @@ void AARESMMOCharacter::Crouching(const FInputActionValue& Value)
 	}
 }
 
+bool AARESMMOCharacter::DetachWeaponATTMToInventory(EStoreSubCategory SubCategory)
+{
+	AWeaponBase* Weapon = GetSelectedWeapon();
+	if (!Weapon)
+	{
+		// fallback на приоритет Weapon1->Weapon2->Pistol (твоя внутренняя логика)
+		Weapon = GetBestWeaponForAttachment();
+	}
+
+	if (!Weapon)
+	{
+		UE_LOG(LogTemp, Warning, TEXT("DetachWeaponATTMToInventory: No weapon to detach from."));
+		return false;
+	}
+
+	FItemBaseRow DetachedRow;
+	FString FailReason;
+	if (!Weapon->DetachItem(SubCategory, DetachedRow, FailReason))
+	{
+		UE_LOG(LogTemp, Warning, TEXT("DetachWeaponATTMToInventory: detach failed: %s | Slot=%d"),
+			*FailReason, (int32)SubCategory);
+		return false;
+	}
+
+	// вернуть предмет в инвентарь
+	if (!AddItemToInventory(DetachedRow, 1))
+	{
+		// попытка отката (чтобы не потерять предмет)
+		Weapon->AttachItem(DetachedRow);
+
+		UE_LOG(LogTemp, Warning, TEXT("DetachWeaponATTMToInventory: inventory full, rollback attach. | Item=%s"),
+			*DetachedRow.InternalName.ToString());
+		return false;
+	}
+
+	RefreshInventoryUI();
+	return true;
+}
+
 void AARESMMOCharacter::SelectWeaponSlot(EEquipmentSlotType SlotType)
 {
 	AWeaponBase* W = GetWeaponActorInSlot(SlotType);
 	SetSelectedWeaponInternal(W);
+
+	if (InventoryLayoutWidgetInstance)
+	{
+		InventoryLayoutWidgetInstance->RefreshWeaponAttachmentsPanel();
+	}
 }
 
 void AARESMMOCharacter::EquipHeroPart(const FItemBaseRow& ItemRow)
@@ -1223,11 +1288,16 @@ void AARESMMOCharacter::SwitchToFPS()
 	};
 
 	// --- Скрываем шмотку на голове только для камеры владельца (FPS) ---
-	//HideForOwner(Mesh_Head, true);
+	HideForOwner(Mesh_Head, true);
 	HideForOwner(Mesh_Hair, true);
+	HideForOwner(Mesh_Beard, true);
+	HideForOwner(Mesh_Hand, true);
+	HideForOwner(Mesh_Body, true);
 	HideForOwner(Mesh_Beard, true);
 	HideForOwner(Mesh_Helmet, true);
 	HideForOwner(Mesh_Mask, true);
+	HideForOwner(Mesh_Armor, true);
+	HideForOwner(Mesh_Backpack, true);
 }
 
 void AARESMMOCharacter::SwitchToTPS()
@@ -1269,11 +1339,16 @@ void AARESMMOCharacter::SwitchToTPS()
 	};
 
 	// --- Возвращаем видимость для владельца (TPS) ---
-	//HideForOwner(Mesh_Head, false);
+	HideForOwner(Mesh_Head, false);
 	HideForOwner(Mesh_Hair, false);
+	HideForOwner(Mesh_Beard, false);
+	HideForOwner(Mesh_Hand, false);
+	HideForOwner(Mesh_Body, false);
 	HideForOwner(Mesh_Beard, false);
 	HideForOwner(Mesh_Helmet, false);
 	HideForOwner(Mesh_Mask, false);
+	HideForOwner(Mesh_Armor, false);
+	HideForOwner(Mesh_Backpack, false);
 }
 
 void AARESMMOCharacter::ToggleCameraMode()

@@ -6,7 +6,6 @@ public class ARESMMO : ModuleRules
 	{
 		PrivateDependencyModuleNames.AddRange(new string[]
 		{
-			"AnimGraphRuntime", 
 			"UnrealEd", 
 		});
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;

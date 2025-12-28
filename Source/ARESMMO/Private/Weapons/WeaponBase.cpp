@@ -343,130 +343,110 @@ bool AWeaponBase::CanAcceptAttachment(const FItemBaseRow& AttachmentRow) const
 	return true;
 }
 
-bool AWeaponBase::AttachItem(const FItemBaseRow& ItemRow)
+bool AWeaponBase::AttachItem(const FItemBaseRow& AttachmentRow)
 {
 	if (!WeaponMesh)
 	{
+		UE_LOG(LogTemp, Warning, TEXT("AttachItem: WeaponMesh is null."));
 		return false;
 	}
 
-	// Только WeaponATTM
-	if (ItemRow.StoreCategory != EStoreCategory::storecat_WeaponATTM)
+	// базовые проверки + WeaponATTMClass
+	FString FailReason;
+	if (!CheckWeaponATTMClass(AttachmentRow, FailReason))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("AttachItem: Item is not storecat_WeaponATTM (%s)"),
-			*ItemRow.InternalName.ToString());
+		UE_LOG(LogTemp, Warning, TEXT("AttachItem: %s | Item=%s"),
+			*FailReason, *AttachmentRow.InternalName.ToString());
 		return false;
 	}
 
-	const EStoreSubCategory Slot = ItemRow.StoreSubCategory;
-
-	// Сокет под этот тип аттача должен быть настроен в AttachmentSlots
-	const FName Socket = GetSocketForAttachment(Slot);
-	if (Socket.IsNone())
+	// должен быть слот/сокет под эту подкатегорию
+	if (!CanAcceptAttachment(AttachmentRow))
 	{
-		UE_LOG(LogTemp, Warning, TEXT("AttachItem: No socket for attachment subcategory=%d (%s)"),
-			(int32)Slot, *ItemRow.InternalName.ToString());
+		UE_LOG(LogTemp, Warning, TEXT("AttachItem: Weapon has no socket for this attachment type. | Item=%s Sub=%d"),
+			*AttachmentRow.InternalName.ToString(), (int32)AttachmentRow.StoreSubCategory);
 		return false;
 	}
 
-	// Сохраняем старый аттач (если был) — чтобы восстановить при фейле
-	FItemBaseRow OldRow;
-	bool bHadOld = false;
-	if (const FAttachedWeaponATTM* Existing = AttachedATTM.Find(Slot))
+	// основная ATTM-логика
+	if (!AttachATTMToWeapon(AttachmentRow, FailReason))
 	{
-		if (Existing->bValid)
-		{
-			OldRow = Existing->ItemRow;
-			bHadOld = true;
-		}
+		UE_LOG(LogTemp, Warning, TEXT("AttachItem: AttachATTMToWeapon failed: %s | Item=%s"),
+			*FailReason, *AttachmentRow.InternalName.ToString());
+		return false;
 	}
 
-	// Локальная функция: создать визуальный компонент (если меш задан)
-	auto SpawnRuntimeVisual = [&](const FItemBaseRow& Row)->bool
+	// визуал (меш) — опционально (Module может быть без меша)
+	const FName Socket = GetSocketForAttachment(AttachmentRow.StoreSubCategory);
+
+	// на всякий случай (если вдруг визуал остался)
+	DetachAttachment(AttachmentRow.StoreSubCategory);
+
+	bool bVisualOk = true;
+
+	if (AttachmentRow.WeaponAttachmentStaticMesh)
 	{
-		// Удаляем старый визуал в этом слоте
-		DetachAttachment(Slot);
-
-		USceneComponent* NewComp = nullptr;
-
-		if (Row.WeaponAttachmentStaticMesh)
+		UStaticMeshComponent* StaticComp = NewObject<UStaticMeshComponent>(this);
+		if (!StaticComp)
 		{
-			UStaticMeshComponent* SM = NewObject<UStaticMeshComponent>(this);
-			SM->SetStaticMesh(Row.WeaponAttachmentStaticMesh);
-			SM->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-			SM->SetGenerateOverlapEvents(false);
-			NewComp = SM;
-		}
-		else if (Row.WeaponAttachmentSkeletalMesh)
-		{
-			USkeletalMeshComponent* SK = NewObject<USkeletalMeshComponent>(this);
-			SK->SetSkeletalMesh(Row.WeaponAttachmentSkeletalMesh);
-			SK->SetCollisionEnabled(ECollisionEnabled::NoCollision);
-			SK->SetGenerateOverlapEvents(false);
-			NewComp = SK;
+			bVisualOk = false;
 		}
 		else
 		{
-			// Важно: разрешаем “логический” аттач без меша (например Module может быть без видимой модели)
-			return true;
+			StaticComp->SetStaticMesh(AttachmentRow.WeaponAttachmentStaticMesh);
+			StaticComp->AttachToComponent(WeaponMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, Socket);
+			StaticComp->RegisterComponent();
+			RuntimeAttachments.Add(AttachmentRow.StoreSubCategory, StaticComp);
 		}
-
-		if (!NewComp)
-		{
-			return false;
-		}
-
-		NewComp->RegisterComponent();
-		NewComp->AttachToComponent(WeaponMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, Socket);
-		RuntimeAttachments.Add(Slot, NewComp);
-		return true;
-	};
-
-	// Если уже есть аттач этого типа — снимаем (замена). Дубликатов одновременно быть не может.
-	if (bHadOld)
+	}
+	else if (AttachmentRow.WeaponAttachmentSkeletalMesh)
 	{
-		FString DetReason;
-		FItemBaseRow DummyRow;
-		if (!DetachATTMFromWeapon(Slot, DummyRow, DetReason))
+		USkeletalMeshComponent* SkelComp = NewObject<USkeletalMeshComponent>(this);
+		if (!SkelComp)
 		{
-			UE_LOG(LogTemp, Warning, TEXT("AttachItem: Detach old failed: %s"), *DetReason);
-			return false;
+			bVisualOk = false;
 		}
-
-		// Визуал тоже убрать
-		DetachAttachment(Slot);
+		else
+		{
+			SkelComp->SetSkeletalMesh(AttachmentRow.WeaponAttachmentSkeletalMesh);
+			SkelComp->AttachToComponent(WeaponMesh, FAttachmentTransformRules::SnapToTargetNotIncludingScale, Socket);
+			SkelComp->RegisterComponent();
+			RuntimeAttachments.Add(AttachmentRow.StoreSubCategory, SkelComp);
+		}
+	}
+	else
+	{
+		// без меша — это нормально (например Module на первом этапе)
+		bVisualOk = true;
 	}
 
-	// Новая логика attach (все проверки: WeaponATTMClass, запрет 2 одинаковых, dovetail rule и т.д.)
-	FString Reason;
-	if (!AttachATTMToWeapon(ItemRow, Reason))
+	// Если визуал упал — откатываем логику, чтобы не оставлять “невидимый” аттач случайно
+	if (!bVisualOk)
 	{
-		UE_LOG(LogTemp, Warning, TEXT("AttachItem: AttachATTMToWeapon failed: %s | Item=%s"),
-			*Reason, *ItemRow.InternalName.ToString());
+		FItemBaseRow DummyRow;
+		FString DetachReason;
+		DetachATTMFromWeapon(AttachmentRow.StoreSubCategory, DummyRow, DetachReason);
 
-		// Пытаемся восстановить старый
-		if (bHadOld)
-		{
-			FString RestoreReason;
-			if (AttachATTMToWeapon(OldRow, RestoreReason))
-			{
-				SpawnRuntimeVisual(OldRow);
-			}
-			else
-			{
-				UE_LOG(LogTemp, Error, TEXT("AttachItem: Restore old failed too: %s | OldItem=%s"),
-					*RestoreReason, *OldRow.InternalName.ToString());
-			}
-		}
-
+		UE_LOG(LogTemp, Warning, TEXT("AttachItem: Visual component creation failed. Rolled back. | Item=%s"),
+			*AttachmentRow.InternalName.ToString());
 		return false;
 	}
 
-	// Визуальный attach
-	SpawnRuntimeVisual(ItemRow);
+	return true;
+}
 
-	UE_LOG(LogTemp, Log, TEXT("AttachItem: Attached %s to %s socket=%s"),
-		*ItemRow.InternalName.ToString(), *GetName(), *Socket.ToString());
+bool AWeaponBase::DetachItem(EStoreSubCategory SubCategory, FItemBaseRow& OutDetachedItemRow, FString& OutFailReason)
+{
+	OutFailReason.Empty();
+
+	// снять логику (проверка “нельзя снять Module если Scope держится на dovetail” — внутри)
+	if (!DetachATTMFromWeapon(SubCategory, OutDetachedItemRow, OutFailReason))
+	{
+		return false;
+	}
+
+	// снять визуал
+	DetachAttachment(SubCategory);
 
 	return true;
 }

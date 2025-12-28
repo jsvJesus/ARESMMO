@@ -43,6 +43,14 @@ class AARESMMOCharacter : public ACharacter
 	/** Camera FPS Action */
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = Camera, meta = (AllowPrivateAccess = "true"))
 	UCameraComponent* FPSCamera;
+
+	/** FPS camera local offset relative to Mesh (not to Head socket) */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|FPS", meta = (AllowPrivateAccess = "true"))
+	FVector FPSCameraLocalOffset = FVector(0.f, 0.f, 160.f);
+
+	/** FPS camera local rotation relative to Mesh */
+	UPROPERTY(EditDefaultsOnly, BlueprintReadOnly, Category = "Camera|FPS", meta = (AllowPrivateAccess = "true"))
+	FRotator FPSCameraLocalRotation = FRotator::ZeroRotator;
 	
 	/** MappingContext */
 	UPROPERTY(EditAnywhere, BlueprintReadOnly, Category = Input, meta = (AllowPrivateAccess = "true"))
@@ -84,6 +92,8 @@ public:
 	USceneComponent* InventoryPreviewPivot = nullptr;
 
 	FORCEINLINE USceneComponent* GetInventoryPreviewPivot() const { return InventoryPreviewPivot; }
+
+	FORCEINLINE class USkeletalMeshComponent* GetFPSHandsMesh() const { return Mesh_FPS_Hand; }
 
 	UFUNCTION(BlueprintCallable, Category="ARES|InventoryPreview")
 	void UpdateInventoryPreviewShowOnly();
@@ -208,6 +218,10 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|HeroParts")
 	USkeletalMeshComponent* Mesh_Legs;
 
+	/** First-person hands mesh (owner only) */
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category ="Camera|FPS")
+	USkeletalMeshComponent* Mesh_FPS_Hand;
+
 	// Дефолтные меши для восстановления при снятии вещей
 	UPROPERTY()
 	USkeletalMesh* DefaultHairMesh = nullptr;
@@ -220,6 +234,9 @@ public:
 
 	UPROPERTY()
 	USkeletalMesh* DefaultHandMesh = nullptr;
+
+	UPROPERTY()
+	USkeletalMesh* DefaultFPSHandMesh = nullptr;
     
     UPROPERTY()
     USkeletalMesh* DefaultBodyMesh = nullptr;
@@ -255,6 +272,9 @@ public:
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category="ARES|WeaponActors")
 	TObjectPtr<AWeaponBase> SelectedWeapon = nullptr;
+
+	UFUNCTION(BlueprintCallable, Category="ARES|Weapon|Attachment")
+	bool DetachWeaponATTMToInventory(EStoreSubCategory SubCategory);
 
 	UFUNCTION(BlueprintCallable, Category="ARES|Weapon")
 	void SelectWeaponSlot(EEquipmentSlotType SlotType);

@@ -15,6 +15,7 @@ class UTextureRenderTarget2D;
 class UButton;
 class UTextBlock;
 class UEquipmentWidget;
+class UWeaponATTMPanelWidget;
 
 UCLASS()
 class ARESMMO_API UInventoryLayoutWidget : public UUserWidget
@@ -157,6 +158,15 @@ public:
 	// Картинка персонажа в инвентаре
 	UPROPERTY(meta=(BindWidget))
 	UImage* PlayerRef;
+
+	UPROPERTY(meta=(BindWidgetOptional))
+	UWeaponATTMPanelWidget* WeaponATTMPanel = nullptr;
+
+	UFUNCTION(BlueprintCallable, Category="ARES|Weapon|Attachment")
+	void RefreshWeaponAttachmentsPanel();
+
+	UFUNCTION()
+	void HandleWeaponATTMDetachRequested(EStoreSubCategory SlotSubCategory);
 
 	/** Вызывается из BP по клику на иконки вкладок (0..9) */
 	UFUNCTION(BlueprintCallable, Category="ARES|Inventory")

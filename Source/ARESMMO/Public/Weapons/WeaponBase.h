@@ -175,4 +175,7 @@ public:
 
 	UFUNCTION(BlueprintCallable, Category="ARES|Attachment")
 	bool AttachItem(const FItemBaseRow& ItemRow);
+
+	UFUNCTION(BlueprintCallable, Category="ARES|Attachment")
+	bool DetachItem(EStoreSubCategory SubCategory, FItemBaseRow& OutDetachedItemRow, FString& OutFailReason);
 };

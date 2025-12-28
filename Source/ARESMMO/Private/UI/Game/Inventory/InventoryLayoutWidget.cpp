@@ -1,6 +1,7 @@
 #include "UI/Game/Inventory/InventoryLayoutWidget.h"
 #include "UI/Game/Inventory/InventoryWidget.h"
 #include "UI/Game/Equipment/EquipmentWidget.h"
+#include "UI/Game/Inventory/Attachments/WeaponATTMPanelWidget.h"
 #include "Components/WidgetSwitcher.h"
 #include "Components/Image.h"
 #include "Components/Button.h"
@@ -46,6 +47,12 @@ void UInventoryLayoutWidget::NativeConstruct()
 	BindInventory(Inv_Attm);
 
 	RefreshWeightText();
+
+	if (WeaponATTMPanel)
+	{
+		WeaponATTMPanel->OnDetachRequested.AddDynamic(this, &UInventoryLayoutWidget::HandleWeaponATTMDetachRequested);
+	}
+	RefreshWeaponAttachmentsPanel();
 }
 
 void UInventoryLayoutWidget::SetTemporaryCarryWeightBonusKg(float BonusKg)
@@ -71,6 +78,27 @@ void UInventoryLayoutWidget::RefreshWeightText()
 		const FString S = FString::Printf(TEXT("Total weight: %.1f (max %.0fkg)"), CurrentKg, MaxKg);
 		TotalWeightText->SetText(FText::FromString(S));
 	}
+}
+
+void UInventoryLayoutWidget::RefreshWeaponAttachmentsPanel()
+{
+	if (!WeaponATTMPanel) return;
+
+	AARESMMOCharacter* Char = Cast<AARESMMOCharacter>(GetOwningPlayerPawn());
+	if (!Char) return;
+
+	WeaponATTMPanel->SetWeapon(Char->GetSelectedWeapon());
+}
+
+void UInventoryLayoutWidget::HandleWeaponATTMDetachRequested(EStoreSubCategory SlotSubCategory)
+{
+	AARESMMOCharacter* Char = Cast<AARESMMOCharacter>(GetOwningPlayerPawn());
+	if (!Char) return;
+
+	Char->DetachWeaponATTMToInventory(SlotSubCategory);
+
+	// на всякий случай (после RefreshInventoryUI всё равно обновится)
+	RefreshWeaponAttachmentsPanel();
 }
 
 void UInventoryLayoutWidget::ShowTab(int32 TabIndex)
@@ -158,6 +186,7 @@ void UInventoryLayoutWidget::DistributeItems(const TArray<FInventoryItemEntry>& 
 
 	CachedInventoryItems = AllItems;
 	RefreshWeightText();
+	RefreshWeaponAttachmentsPanel();
 }
 
 void UInventoryLayoutWidget::SetEquipment(const TMap<EEquipmentSlotType, FItemBaseRow>& Equipment)
@@ -169,6 +198,7 @@ void UInventoryLayoutWidget::SetEquipment(const TMap<EEquipmentSlotType, FItemBa
 
 	CachedEquipment = Equipment;
 	RefreshWeightText();
+	RefreshWeaponAttachmentsPanel();
 }
 
 void UInventoryLayoutWidget::SetPlayerImage(UTextureRenderTarget2D* RenderTarget)
