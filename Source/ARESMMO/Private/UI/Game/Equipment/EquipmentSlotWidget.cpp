@@ -1,5 +1,7 @@
 #include "UI/Game/Equipment/EquipmentSlotWidget.h"
 #include "UI/Game/Inventory/Context/ItemDragDropOperation.h"
+#include "UI/Game/Inventory/InventoryLayoutWidget.h"
+#include "UI/Game/Inventory/InventoryWidget.h"
 #include "Items/ItemSizeRules.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "InputCoreTypes.h"
@@ -34,6 +36,16 @@ void UEquipmentSlotWidget::ClearItem()
 		SlotSizeBox->ClearWidthOverride();
 		SlotSizeBox->ClearHeightOverride();
 	}
+}
+
+UInventoryWidget* UEquipmentSlotWidget::ResolveInventoryWidget() const
+{
+	if (const UInventoryLayoutWidget* LayoutWidget = GetTypedOuter<UInventoryLayoutWidget>())
+	{
+		return LayoutWidget->GetActiveInventoryWidget();
+	}
+
+	return nullptr;
 }
 
 void UEquipmentSlotWidget::SetItem(const FItemBaseRow& ItemRow)
@@ -95,6 +107,17 @@ FReply UEquipmentSlotWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry
 		return UWidgetBlueprintLibrary::DetectDragIfPressed(InMouseEvent, this, EKeys::LeftMouseButton).NativeReply;
 	}
 
+	if (InMouseEvent.GetEffectingButton() == EKeys::RightMouseButton && bHasItem)
+	{
+		if (UInventoryWidget* InventoryWidget = ResolveInventoryWidget())
+		{
+			InventoryWidget->CancelCloseItemActionMenu();
+			InventoryWidget->HideItemTooltip();
+			InventoryWidget->ShowEquipmentActionMenu(CurrentItemRow, SlotType, InMouseEvent.GetScreenSpacePosition());
+		}
+		return FReply::Handled();
+	}
+
 	return Super::NativeOnMouseButtonDown(InGeometry, InMouseEvent);
 }
 
@@ -124,16 +147,34 @@ void UEquipmentSlotWidget::NativeOnDragDetected(
 	}
 
 	// Drag visual
-	UEquipmentSlotWidget* DragVisual = CreateWidget<UEquipmentSlotWidget>(GetWorld(), GetClass());
+	UEquipmentSlotWidget* DragVisual = CreateWidget<UEquipmentSlotWidget>(GetOwningPlayer(), GetClass());
 	if (DragVisual)
 	{
 		DragVisual->SetItem(CurrentItemRow);
 		DragVisual->SetRenderOpacity(0.85f);
-		Op->DefaultDragVisual = DragVisual;
+		USizeBox* DragBox = NewObject<USizeBox>(Op);
+		if (DragBox)
+		{
+			const float Wpx = static_cast<float>(Op->SizeInCells.Width) * CellSizePx;
+			const float Hpx = static_cast<float>(Op->SizeInCells.Height) * CellSizePx;
+			DragBox->SetWidthOverride(Wpx);
+			DragBox->SetHeightOverride(Hpx);
+			DragBox->SetContent(DragVisual);
+			Op->DefaultDragVisual = DragBox;
+		}
+		else
+		{
+			Op->DefaultDragVisual = DragVisual;
+		}
 		Op->Pivot = EDragPivot::MouseDown;
 	}
 
 	OutOperation = Op;
+
+	if (UInventoryWidget* InventoryWidget = ResolveInventoryWidget())
+	{
+		InventoryWidget->HideItemTooltip();
+	}
 }
 
 bool UEquipmentSlotWidget::NativeOnDrop(
@@ -157,4 +198,29 @@ bool UEquipmentSlotWidget::NativeOnDrop(
 
 	// Экипировка -> Экипировка (не обязательно, пока игнорим)
 	return (Op->SourceType == EItemDragSource::Equipment && Op->FromSlot == SlotType);
+}
+
+void UEquipmentSlotWidget::NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
+{
+	Super::NativeOnMouseEnter(InGeometry, InMouseEvent);
+
+	if (bHasItem)
+	{
+		if (UInventoryWidget* InventoryWidget = ResolveInventoryWidget())
+		{
+			InventoryWidget->CancelCloseItemActionMenu();
+			InventoryWidget->ShowEquipmentTooltip(CurrentItemRow, 1, InMouseEvent.GetScreenSpacePosition());
+		}
+	}
+}
+
+void UEquipmentSlotWidget::NativeOnMouseLeave(const FPointerEvent& InMouseEvent)
+{
+	Super::NativeOnMouseLeave(InMouseEvent);
+
+	if (UInventoryWidget* InventoryWidget = ResolveInventoryWidget())
+	{
+		InventoryWidget->HideItemTooltip();
+		InventoryWidget->RequestCloseItemActionMenu();
+	}
 }

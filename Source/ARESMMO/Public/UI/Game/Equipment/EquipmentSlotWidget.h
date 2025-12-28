@@ -10,6 +10,8 @@ class UTextBlock;
 class UImage;
 class USizeBox;
 class UDragDropOperation;
+class UInventoryWidget;
+class UInventoryLayoutWidget;
 
 DECLARE_DYNAMIC_MULTICAST_DELEGATE_OneParam(FOnEquipmentSlotDoubleClicked, UEquipmentSlotWidget*, SlotWidget);
 
@@ -62,6 +64,9 @@ protected:
 
 	// Drop handler
 	virtual bool NativeOnDrop(const FGeometry& InGeometry, const FDragDropEvent& InDragDropEvent, UDragDropOperation* InOperation) override;
+
+	virtual void NativeOnMouseEnter(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent) override;
+	virtual void NativeOnMouseLeave(const FPointerEvent& InMouseEvent) override;
 	
 public:
 	virtual void NativeConstruct() override;
@@ -76,4 +81,7 @@ public:
 
 	UFUNCTION(BlueprintPure, Category="ARES|Equipment")
 	bool IsEmpty() const { return !bHasItem; }
+
+private:
+	UInventoryWidget* ResolveInventoryWidget() const;
 };

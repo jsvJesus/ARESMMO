@@ -1944,6 +1944,52 @@ bool AARESMMOCharacter::UnequipSlotToInventoryAt(EEquipmentSlotType SlotType, in
 		return false;
 	}
 
+	auto DetachAttachmentsToInventory = [this](AWeaponBase* Weapon) -> bool
+	{
+		if (!Weapon || Weapon->AttachedATTM.IsEmpty())
+		{
+			return true;
+		}
+
+		TArray<EStoreSubCategory> AttachmentKeys;
+		AttachmentKeys.Reserve(Weapon->AttachedATTM.Num());
+		for (const auto& Pair : Weapon->AttachedATTM)
+		{
+			AttachmentKeys.Add(Pair.Key);
+		}
+
+		TArray<FItemBaseRow> DetachedItems;
+		DetachedItems.Reserve(AttachmentKeys.Num());
+
+		for (EStoreSubCategory SubCategory : AttachmentKeys)
+		{
+			FItemBaseRow DetachedRow;
+			FString FailReason;
+			if (!Weapon->DetachItem(SubCategory, DetachedRow, FailReason))
+			{
+				for (int32 Index = DetachedItems.Num() - 1; Index >= 0; --Index)
+				{
+					Weapon->AttachItem(DetachedItems[Index]);
+				}
+				return false;
+			}
+
+			if (!AddItemToInventory(DetachedRow, 1))
+			{
+				Weapon->AttachItem(DetachedRow);
+				for (int32 Index = DetachedItems.Num() - 1; Index >= 0; --Index)
+				{
+					Weapon->AttachItem(DetachedItems[Index]);
+				}
+				return false;
+			}
+
+			DetachedItems.Add(DetachedRow);
+		}
+
+		return true;
+	};
+
 	// ===== Снимаем визуал (как в UnequipSlot), но оружие теперь через WeaponActor =====
 	switch (SlotType)
 	{
@@ -1977,12 +2023,20 @@ bool AARESMMOCharacter::UnequipSlotToInventoryAt(EEquipmentSlotType SlotType, in
 	
 	case EEquipmentSlotType::EquipmentSlotPistol:
 	{
+		if (!DetachAttachmentsToInventory(GetWeaponActorInSlot(EEquipmentSlotType::EquipmentSlotPistol)))
+		{
+			return false;
+		}
 		DestroyWeaponActorInSlot(EEquipmentSlotType::EquipmentSlotPistol);
 	}
 	
 	case EEquipmentSlotType::EquipmentSlotWeapon1:
 	case EEquipmentSlotType::EquipmentSlotWeapon2:
 	{
+		if (!DetachAttachmentsToInventory(GetWeaponActorInSlot(SlotType)))
+		{
+			return false;
+		}
 		DestroyWeaponActorInSlot(SlotType);
 	}
 

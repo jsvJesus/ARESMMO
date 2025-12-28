@@ -8,6 +8,7 @@
 #include "Components/Button.h"
 #include "Blueprint/UserWidget.h"
 #include "ARESMMO/ARESMMOCharacter.h"
+#include "Blueprint/WidgetLayoutLibrary.h"
 #include "Weapons/WeaponBase.h"
 
 void UInventoryWidget::NativeConstruct()
@@ -369,6 +370,7 @@ void UInventoryWidget::ShowItemTooltip(const FItemBaseRow& ItemRow, int32 Quanti
 		return;
 	}
 
+	AttachTooltipToCanvas();
 	ItemTooltipWidget->SetTooltipData(ItemRow, Quantity);
 	ItemTooltipWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
 
@@ -396,6 +398,33 @@ void UInventoryWidget::ShowItemTooltip(const FItemBaseRow& ItemRow, int32 Quanti
 	TootipSlot->SetPosition(Local);
 }
 
+void UInventoryWidget::ShowEquipmentTooltip(const FItemBaseRow& ItemRow, int32 Quantity, const FVector2D& ScreenPos)
+{
+	EnsureTooltipCreated();
+	if (!ItemTooltipWidget)
+	{
+		return;
+	}
+
+	AttachTooltipToViewport();
+	ItemTooltipWidget->SetTooltipData(ItemRow, Quantity);
+	ItemTooltipWidget->SetVisibility(ESlateVisibility::HitTestInvisible);
+	ItemTooltipWidget->ForceLayoutPrepass();
+
+	const FVector2D ViewportSize = UWidgetLayoutLibrary::GetViewportSize(this);
+	FVector2D Desired = ItemTooltipWidget->GetDesiredSize();
+	if (Desired.IsNearlyZero())
+	{
+		Desired = FVector2D(320.f, 200.f);
+	}
+
+	FVector2D Position = ScreenPos + FVector2D(16.f, 16.f);
+	Position.X = FMath::Clamp(Position.X, 0.f, FMath::Max(0.f, ViewportSize.X - Desired.X));
+	Position.Y = FMath::Clamp(Position.Y, 0.f, FMath::Max(0.f, ViewportSize.Y - Desired.Y));
+
+	ItemTooltipWidget->SetPositionInViewport(Position, false);
+}
+
 void UInventoryWidget::HideItemTooltip()
 {
 	if (ItemTooltipWidget)
@@ -420,6 +449,9 @@ void UInventoryWidget::ShowItemActionMenu(const FItemBaseRow& ItemRow, int32 Cel
 	Menu_CellX = CellX;
 	Menu_CellY = CellY;
 	Menu_Quantity = Quantity;
+
+	bMenuFromEquipment = false;
+	Menu_EquipmentSlot = EEquipmentSlotType::None;
 
 	// ресурсы в инвентаре
 	const bool bHasBattery   = HasSubCategory(EStoreSubCategory::Item_Battery);
@@ -471,6 +503,45 @@ void UInventoryWidget::ShowItemActionMenu(const FItemBaseRow& ItemRow, int32 Cel
 	MenuSlot->SetPosition(Local);
 }
 
+void UInventoryWidget::ShowEquipmentActionMenu(
+	const FItemBaseRow& ItemRow,
+	EEquipmentSlotType SlotType,
+	const FVector2D& ScreenPos)
+{
+	CancelCloseItemActionMenu();
+	EnsureActionMenuCreated();
+
+	if (!ItemActionMenuWidget)
+	{
+		return;
+	}
+
+	AttachActionMenuToViewport();
+	Menu_InternalName = ItemRow.InternalName;
+	Menu_CellX = 0;
+	Menu_CellY = 0;
+	Menu_Quantity = 1;
+	bMenuFromEquipment = true;
+	Menu_EquipmentSlot = SlotType;
+
+	ItemActionMenuWidget->SetupForEquipmentItem(ItemRow);
+	ItemActionMenuWidget->SetVisibility(ESlateVisibility::Visible);
+	ItemActionMenuWidget->ForceLayoutPrepass();
+
+	const FVector2D ViewportSize = UWidgetLayoutLibrary::GetViewportSize(this);
+	FVector2D Desired = ItemActionMenuWidget->GetDesiredSize();
+	if (Desired.IsNearlyZero())
+	{
+		Desired = FVector2D(220.f, 260.f);
+	}
+
+	FVector2D Position = ScreenPos + FVector2D(8.f, 8.f);
+	Position.X = FMath::Clamp(Position.X, 0.f, FMath::Max(0.f, ViewportSize.X - Desired.X));
+	Position.Y = FMath::Clamp(Position.Y, 0.f, FMath::Max(0.f, ViewportSize.Y - Desired.Y));
+
+	ItemActionMenuWidget->SetPositionInViewport(Position, false);
+}
+
 void UInventoryWidget::HideItemActionMenu()
 {
 	CancelCloseItemActionMenu();
@@ -479,6 +550,8 @@ void UInventoryWidget::HideItemActionMenu()
 	{
 		ItemActionMenuWidget->SetVisibility(ESlateVisibility::Collapsed);
 	}
+	bMenuFromEquipment = false;
+	Menu_EquipmentSlot = EEquipmentSlotType::None;
 }
 
 void UInventoryWidget::RequestCloseItemActionMenu()
@@ -531,6 +604,41 @@ void UInventoryWidget::EnsureTooltipCreated()
 	}
 }
 
+void UInventoryWidget::AttachTooltipToCanvas()
+{
+	if (!ItemTooltipWidget || !InventoryCanvas)
+	{
+		return;
+	}
+
+	if (ItemTooltipWidget->GetParent() != InventoryCanvas)
+	{
+		ItemTooltipWidget->RemoveFromParent();
+		UCanvasPanelSlot* TootipSlot = InventoryCanvas->AddChildToCanvas(ItemTooltipWidget);
+		if (TootipSlot)
+		{
+			TootipSlot->SetAutoSize(true);
+			TootipSlot->SetZOrder(1000);
+		}
+		ItemTooltipWidget->SetVisibility(ESlateVisibility::Collapsed);
+		ItemTooltipWidget->SetIsEnabled(false);
+	}
+}
+
+void UInventoryWidget::AttachTooltipToViewport()
+{
+	if (!ItemTooltipWidget)
+	{
+		return;
+	}
+
+	if (!ItemTooltipWidget->IsInViewport())
+	{
+		ItemTooltipWidget->RemoveFromParent();
+		ItemTooltipWidget->AddToViewport(1000);
+	}
+}
+
 void UInventoryWidget::EnsureActionMenuCreated()
 {
 	if (!InventoryCanvas)
@@ -572,11 +680,56 @@ void UInventoryWidget::EnsureActionMenuCreated()
 	}
 }
 
+void UInventoryWidget::AttachActionMenuToCanvas()
+{
+	if (!ItemActionMenuWidget || !InventoryCanvas)
+	{
+		return;
+	}
+
+	if (ItemActionMenuWidget->GetParent() != InventoryCanvas)
+	{
+		ItemActionMenuWidget->RemoveFromParent();
+		UCanvasPanelSlot* ActionSlot = InventoryCanvas->AddChildToCanvas(ItemActionMenuWidget);
+		if (ActionSlot)
+		{
+			ActionSlot->SetAutoSize(true);
+			ActionSlot->SetZOrder(1000);
+		}
+		ItemActionMenuWidget->SetVisibility(ESlateVisibility::Collapsed);
+	}
+}
+
+void UInventoryWidget::AttachActionMenuToViewport()
+{
+	if (!ItemActionMenuWidget)
+	{
+		return;
+	}
+
+	if (!ItemActionMenuWidget->IsInViewport())
+	{
+		ItemActionMenuWidget->RemoveFromParent();
+		ItemActionMenuWidget->AddToViewport(1000);
+	}
+}
+
 void UInventoryWidget::HandleContextAction(EItemContextAction Action)
 {
 	AARESMMOCharacter* Char = Cast<AARESMMOCharacter>(GetOwningPlayerPawn());
 	if (!Char)
 	{
+		HideItemActionMenu();
+		return;
+	}
+
+	if (bMenuFromEquipment)
+	{
+		if (Action == EItemContextAction::Equip && Menu_EquipmentSlot != EEquipmentSlotType::None)
+		{
+			Char->UnequipSlot(Menu_EquipmentSlot);
+		}
+
 		HideItemActionMenu();
 		return;
 	}

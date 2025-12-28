@@ -37,6 +37,9 @@ public:
 	UFUNCTION(BlueprintCallable, Category="ARES|Inventory|ContextMenu")
 	void SetupForItem(const FItemBaseRow& ItemRow, bool bHasBattery, bool bHasAmmo, bool bHasRepairKit);
 
+	UFUNCTION(BlueprintCallable, Category="ARES|Inventory|ContextMenu")
+	void SetupForEquipmentItem(const FItemBaseRow& ItemRow);
+
 	// Обновить варианты Detach по установленным модулям на оружии
 	UFUNCTION(BlueprintCallable, Category="ARES|Inventory|ContextMenu")
 	void SetDetachOptions(const TSet<EStoreSubCategory>& AvailableDetachOptions);
@@ -94,6 +97,8 @@ private:
 	void SetDetachButtonsVisible(bool bVisible);
 	void SetDetachButtonVisibleFor(EStoreSubCategory SubCategory, bool bVisible);
 	void QueueDetachAction(EStoreSubCategory SubCategory);
+
+	bool bDetachExpanded = false;
 
 	// Context Menu Close
 	TWeakObjectPtr<UInventoryWidget> OwnerInventoryWidget;

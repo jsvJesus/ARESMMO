@@ -135,10 +135,12 @@ protected:
 public:
 	// Tooltip
 	void ShowItemTooltip(const FItemBaseRow& ItemRow, int32 Quantity, const FVector2D& ScreenPos);
+	void ShowEquipmentTooltip(const FItemBaseRow& ItemRow, int32 Quantity, const FVector2D& ScreenPos);
 	void HideItemTooltip();
 
 	// Context Menu
 	void ShowItemActionMenu(const FItemBaseRow& ItemRow, int32 CellX, int32 CellY, int32 Quantity, const FVector2D& ScreenPos);
+	void ShowEquipmentActionMenu(const FItemBaseRow& ItemRow, EEquipmentSlotType SlotType, const FVector2D& ScreenPos);
 	void HideItemActionMenu();
 
 	// Context Menu Close
@@ -148,9 +150,13 @@ public:
 private:
 	// Tooltip
 	void EnsureTooltipCreated();
+	void AttachTooltipToCanvas();
+	void AttachTooltipToViewport();
 
 	// Context Menu
 	void EnsureActionMenuCreated();
+	void AttachActionMenuToCanvas();
+	void AttachActionMenuToViewport();
 
 	UFUNCTION()
 	void HandleContextAction(EItemContextAction Action);
@@ -163,6 +169,9 @@ private:
 	int32 Menu_CellX = 0;
 	int32 Menu_CellY = 0;
 	int32 Menu_Quantity = 1;
+	
+	bool bMenuFromEquipment = false;
+	EEquipmentSlotType Menu_EquipmentSlot = EEquipmentSlotType::None;
 
 	// Context Menu Close
 	FTimerHandle ActionMenuCloseTimer;

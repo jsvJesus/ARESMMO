@@ -141,7 +141,11 @@ void UItemActionMenuWidget::SetupForItem(const FItemBaseRow& ItemRow, bool bHasB
 	// Detach (для weapon attachments: снимаем модуль соответствующего типа)
 	const bool bDetach = ItemRow.StoreCategory == EStoreCategory::storecat_WeaponATTM;
 	SetBtnVisible(Btn_Detach, bDetach);
+
+	bDetachExpanded = false;
 	SetDetachButtonsVisible(false);
+	CachedDetachOptions.Empty();
+	PendingDetachSubCategory = EStoreSubCategory::None;
 
 	// Use item
 	const bool bUse =
@@ -196,15 +200,43 @@ void UItemActionMenuWidget::SetupForItem(const FItemBaseRow& ItemRow, bool bHasB
 	SetBtnEnabled(Btn_Repair, bHasRepairKit);
 }
 
+void UItemActionMenuWidget::SetupForEquipmentItem(const FItemBaseRow& ItemRow)
+{
+	(void)ItemRow;
+	SetBtnVisible(Btn_Equip, true);
+	SetBtnVisible(Btn_Attach, false);
+	SetBtnVisible(Btn_Detach, false);
+	SetBtnVisible(Btn_Use, false);
+	SetBtnVisible(Btn_Study, false);
+	SetBtnVisible(Btn_Drop, false);
+	SetBtnVisible(Btn_ChargeItem, false);
+	SetBtnVisible(Btn_ChargeMagazine, false);
+	SetBtnVisible(Btn_Repair, false);
+
+	bDetachExpanded = false;
+	SetDetachButtonsVisible(false);
+	CachedDetachOptions.Empty();
+	PendingDetachSubCategory = EStoreSubCategory::None;
+}
+
 void UItemActionMenuWidget::SetDetachOptions(const TSet<EStoreSubCategory>& AvailableDetachOptions)
 {
-	SetDetachButtonVisibleFor(EStoreSubCategory::WeaponATTM_Grip, CachedDetachOptions.Contains(EStoreSubCategory::WeaponATTM_Grip));
+	/*SetDetachButtonVisibleFor(EStoreSubCategory::WeaponATTM_Grip, CachedDetachOptions.Contains(EStoreSubCategory::WeaponATTM_Grip));
 	SetDetachButtonVisibleFor(EStoreSubCategory::WeaponATTM_Scope, CachedDetachOptions.Contains(EStoreSubCategory::WeaponATTM_Scope));
 	SetDetachButtonVisibleFor(EStoreSubCategory::WeaponATTM_Magazine, CachedDetachOptions.Contains(EStoreSubCategory::WeaponATTM_Magazine));
 	SetDetachButtonVisibleFor(EStoreSubCategory::WeaponATTM_Laser, CachedDetachOptions.Contains(EStoreSubCategory::WeaponATTM_Laser));
 	SetDetachButtonVisibleFor(EStoreSubCategory::WeaponATTM_Flashlight, CachedDetachOptions.Contains(EStoreSubCategory::WeaponATTM_Flashlight));
 	SetDetachButtonVisibleFor(EStoreSubCategory::WeaponATTM_Silencer, CachedDetachOptions.Contains(EStoreSubCategory::WeaponATTM_Silencer));
-	SetDetachButtonVisibleFor(EStoreSubCategory::WeaponATTM_Module, CachedDetachOptions.Contains(EStoreSubCategory::WeaponATTM_Module));
+	SetDetachButtonVisibleFor(EStoreSubCategory::WeaponATTM_Module, CachedDetachOptions.Contains(EStoreSubCategory::WeaponATTM_Module));*/
+
+	CachedDetachOptions = AvailableDetachOptions;
+
+	// Главная кнопка Detach имеет смысл только если есть что снимать
+	SetBtnVisible(Btn_Detach, true);
+	SetBtnEnabled(Btn_Detach, CachedDetachOptions.Num() > 0);
+
+	// Если подменю уже раскрыто — обновим видимость подкнопок
+	SetDetachButtonsVisible(bDetachExpanded);
 }
 
 EStoreSubCategory UItemActionMenuWidget::ConsumePendingDetachSubCategory()
@@ -222,7 +254,22 @@ void UItemActionMenuWidget::SetOwnerInventory(UInventoryWidget* InOwner)
 // --- Clicks ---
 void UItemActionMenuWidget::ClickEquip()          { Fire(EItemContextAction::Equip); }
 void UItemActionMenuWidget::ClickAttach()         { Fire(EItemContextAction::Attach); }
-void UItemActionMenuWidget::ClickDetach()         { Fire(EItemContextAction::Detach); }
+
+void UItemActionMenuWidget::ClickDetach()
+{
+	// Если нет опций — просто шлём Detach (обработчик сам решит что делать)
+	if (CachedDetachOptions.Num() == 0)
+	{
+		PendingDetachSubCategory = EStoreSubCategory::None;
+		Fire(EItemContextAction::Detach);
+		return;
+	}
+
+	// Иначе: Detach “спрашивает какой” через раскрытие подменю
+	bDetachExpanded = !bDetachExpanded;
+	SetDetachButtonsVisible(bDetachExpanded);
+}
+
 void UItemActionMenuWidget::ClickDetachGrip()     { QueueDetachAction(EStoreSubCategory::WeaponATTM_Grip); }
 void UItemActionMenuWidget::ClickDetachScope()    { QueueDetachAction(EStoreSubCategory::WeaponATTM_Scope); }
 void UItemActionMenuWidget::ClickDetachMagazine() { QueueDetachAction(EStoreSubCategory::WeaponATTM_Magazine); }

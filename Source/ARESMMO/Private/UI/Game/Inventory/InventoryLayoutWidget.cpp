@@ -185,6 +185,33 @@ void UInventoryLayoutWidget::SetPlayerImage(UTextureRenderTarget2D* RenderTarget
 	PlayerRef->SetBrush(Brush);
 }
 
+UInventoryWidget* UInventoryLayoutWidget::GetActiveInventoryWidget() const
+{
+	if (InventorySwitcher)
+	{
+		if (UWidget* ActiveWidget = InventorySwitcher->GetActiveWidget())
+		{
+			if (UInventoryWidget* ActiveInventory = Cast<UInventoryWidget>(ActiveWidget))
+			{
+				return ActiveInventory;
+			}
+		}
+	}
+
+	if (Inv_All) return Inv_All;
+	if (Inv_Weapon) return Inv_Weapon;
+	if (Inv_Armor) return Inv_Armor;
+	if (Inv_Helmet) return Inv_Helmet;
+	if (Inv_Medic) return Inv_Medic;
+	if (Inv_Food) return Inv_Food;
+	if (Inv_Items) return Inv_Items;
+	if (Inv_Devices) return Inv_Devices;
+	if (Inv_Craft) return Inv_Craft;
+	if (Inv_Attm) return Inv_Attm;
+
+	return nullptr;
+}
+
 FReply UInventoryLayoutWidget::NativeOnMouseButtonDown(const FGeometry& InGeometry, const FPointerEvent& InMouseEvent)
 {
 	// Если нажали ЛКМ по области с PlayerRef – начинаем крутить

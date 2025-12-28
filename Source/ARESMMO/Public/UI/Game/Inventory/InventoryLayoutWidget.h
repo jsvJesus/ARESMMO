@@ -208,4 +208,7 @@ public:
 	// Установить текстуру в PlayerRef
 	UFUNCTION(BlueprintCallable, Category="ARES|Inventory")
 	void SetPlayerImage(UTextureRenderTarget2D* RenderTarget);
+
+	UFUNCTION(BlueprintCallable, Category="ARES|Inventory")
+	UInventoryWidget* GetActiveInventoryWidget() const;
 };
