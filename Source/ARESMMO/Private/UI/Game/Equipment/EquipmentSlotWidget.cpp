@@ -2,7 +2,7 @@
 #include "UI/Game/Inventory/Context/ItemDragDropOperation.h"
 #include "UI/Game/Inventory/InventoryLayoutWidget.h"
 #include "UI/Game/Inventory/InventoryWidget.h"
-#include "Items/ItemSizeRules.h"
+#include "Items/MasterItemData.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "InputCoreTypes.h"
 #include "Components/Image.h"

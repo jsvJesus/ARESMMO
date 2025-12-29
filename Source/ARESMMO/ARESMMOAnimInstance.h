@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Animation/AnimInstance.h"
-#include "Animations/AnimType.h"
+#include "Items/MasterItemData.h"
 #include "ARESMMOAnimInstance.generated.h"
 
 class AARESMMOCharacter;

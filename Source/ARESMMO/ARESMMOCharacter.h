@@ -3,8 +3,7 @@
 #include "CoreMinimal.h"
 #include "GameFramework/Character.h"
 #include "Logging/LogMacros.h"
-#include "Items/ItemData.h"
-#include "Animations/AnimType.h"
+#include "Items/MasterItemData.h"
 #include "ARESMMOCharacter.generated.h"
 
 struct FInventoryItemEntry;

@@ -17,9 +17,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/SceneCaptureComponent2D.h"
 #include "World/WorldItemActor.h"
-#include "Items/ItemData.h"
-#include "Items/ItemSizeRules.h"
-#include "Items/ItemTypes.h"
+#include "Items/MasterItemData.h"
 #include "Weapons/WeaponBase.h"
 
 DEFINE_LOG_CATEGORY(LogTemplateCharacter);

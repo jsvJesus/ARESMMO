@@ -4,7 +4,7 @@
 #include "Components/Image.h"
 #include "Components/TextBlock.h"
 #include "Components/SizeBox.h"
-#include "Items/ItemConditionLibrary.h"
+#include "Items/MasterItemData.h"
 #include "Blueprint/WidgetBlueprintLibrary.h"
 #include "InputCoreTypes.h"
 #include "Engine/Texture2D.h"

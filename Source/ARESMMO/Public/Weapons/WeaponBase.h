@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "GameFramework/Actor.h"
-#include "Items/ItemData.h"
+#include "Items/MasterItemData.h"
 #include "WeaponBase.generated.h"
 
 class USkeletalMeshComponent;

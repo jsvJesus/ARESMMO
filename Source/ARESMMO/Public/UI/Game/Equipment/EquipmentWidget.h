@@ -2,8 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "Items/ItemData.h"
-#include "Items/ItemTypes.h"
+#include "Items/MasterItemData.h"
 #include "EquipmentWidget.generated.h"
 
 class UEquipmentSlotWidget;

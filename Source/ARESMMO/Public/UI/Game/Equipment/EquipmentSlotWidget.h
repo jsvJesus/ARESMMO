@@ -2,8 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "Items/ItemData.h"      // FItemBaseRow, GridSize
-#include "Items/ItemTypes.h"     // EEquipmentSlotType
+#include "Items/MasterItemData.h"
 #include "EquipmentSlotWidget.generated.h"
 
 class UTextBlock;

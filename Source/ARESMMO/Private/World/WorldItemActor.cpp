@@ -3,8 +3,7 @@
 #include "Components/SkeletalMeshComponent.h"
 #include "ARESMMO/ARESMMOCharacter.h"
 #include "Components/BoxComponent.h"
-#include "Items/ItemData.h"
-#include "Items/ItemTypes.h"
+#include "Items/MasterItemData.h"
 
 namespace ItemDB
 {

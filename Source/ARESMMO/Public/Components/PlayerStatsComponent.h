@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Components/ActorComponent.h"
-#include "Items/ItemData.h"
+#include "Items/MasterItemData.h"
 #include "PlayerStatsComponent.generated.h"
 
 /* ===== Основные статы ===== */

@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "UObject/Object.h"
-#include "Items/ItemData.h"
+#include "Items/MasterItemData.h"
 #include "WeaponAttachments.generated.h"
 
 class AWeaponBase;

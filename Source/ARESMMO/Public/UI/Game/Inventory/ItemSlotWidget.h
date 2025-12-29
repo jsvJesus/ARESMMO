@@ -2,7 +2,7 @@
 
 #include "CoreMinimal.h"
 #include "Blueprint/UserWidget.h"
-#include "Items/ItemData.h"
+#include "Items/MasterItemData.h"
 #include "ItemSlotWidget.generated.h"
 
 class UTextBlock;
